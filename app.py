@@ -171,7 +171,7 @@ COLOR_B = "#6366f1"
 COLOR_H = "#9ca3af"
 COLOR_NP = "#f3f4f6"
 
-def render_live_card(match_data, team_names, total_holes):
+def render_live_card(match_data, team_names, shots_received, total_holes):
     setup = match_data["setup"]
     outcomes = match_data.get("outcomes", {})
     
@@ -184,21 +184,27 @@ def render_live_card(match_data, team_names, total_holes):
     border_a = "none"
     border_b = "none"
     
-    name_a_display = f"<span style='display:inline-block; width:10px; height:10px; border-radius:50%; background-color:{COLOR_A}; margin-right:8px;'></span>{team_names['A']}"
-    name_b_display = f"{team_names['B']}<span style='display:inline-block; width:10px; height:10px; border-radius:50%; background-color:{COLOR_B}; margin-left:8px;'></span>"
+    shots_a = shots_received.get(team_names['A'], 0)
+    shots_b = shots_received.get(team_names['B'], 0)
+    
+    disp_a = f"{team_names['A']} ({shots_a})" if shots_a > 0 else team_names['A']
+    disp_b = f"{team_names['B']} ({shots_b})" if shots_b > 0 else team_names['B']
+    
+    name_a_display = f"<span style='display:inline-block; width:10px; height:10px; border-radius:50%; background-color:{COLOR_A}; margin-right:8px;'></span>{disp_a}"
+    name_b_display = f"{disp_b}<span style='display:inline-block; width:10px; height:10px; border-radius:50%; background-color:{COLOR_B}; margin-left:8px;'></span>"
     
     if leader == "A":
         bg_a, text_a = COLOR_A, "white"
         shape_a = "polygon(0% 0%, 92% 0%, 100% 50%, 92% 100%, 0% 100%)"
         border_a = f"1px solid {COLOR_A}"
         status_text = f"<span style='color: {COLOR_A};'>{final_str}</span>"
-        name_a_display = team_names['A'] 
+        name_a_display = disp_a 
     elif leader == "B":
         bg_b, text_b = COLOR_B, "white"
         shape_b = "polygon(8% 0%, 100% 0%, 100% 100%, 8% 100%, 0% 50%)"
         border_b = f"1px solid {COLOR_B}"
         status_text = f"<span style='color: {COLOR_B};'>{final_str}</span>"
-        name_b_display = team_names['B'] 
+        name_b_display = disp_b 
     else:
         status_text = "<span style='color: #555;'>ALL SQ</span>"
 
@@ -214,7 +220,7 @@ def render_live_card(match_data, team_names, total_holes):
 
     subtext = "FINAL" if match_over else f"Thru {holes_played}"
 
-    html_string = f"""<div style="background: white; border: 1px solid #eaeaea; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 20px; margin-top: 10px; font-family: sans-serif;"><div style="text-align: center; color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 1px;">{setup['match_name']} - {setup['match_type']}</div><div style="display: flex; align-items: center; justify-content: space-between; height: 65px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px;"><div style="flex: 1; height: 100%; background: {bg_a}; color: {text_a}; display: flex; align-items: center; padding-left: 15px; font-weight: bold; font-size: 15px; border-radius: 6px 0 0 6px; clip-path: {shape_a}; border: {border_a};">{name_a_display}</div><div style="width: 100px; text-align: center; display: flex; flex-direction: column; justify-content: center;"><span style="font-size: 11px; color: #999; text-transform: uppercase; margin-bottom: 2px; font-weight: bold;">{subtext}</span><span style="font-size: 18px; font-weight: 800;">{status_text}</span></div><div style="flex: 1; height: 100%; background: {bg_b}; color: {text_b}; display: flex; align-items: center; justify-content: flex-end; padding-right: 15px; font-weight: bold; font-size: 15px; border-radius: 0 6px 6px 0; clip-path: {shape_b}; border: {border_b};">{name_b_display}</div></div><div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">{circles_html}</div></div>"""
+    html_string = f"""<div style="background: white; border: 1px solid #eaeaea; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 20px; margin-top: 10px; font-family: sans-serif;"><div style="text-align: center; color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 1px;">{setup['match_name']} - {setup['match_type']}</div><div style="display: flex; align-items: center; justify-content: space-between; height: 65px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px;"><div style="flex: 1; height: 100%; background: {bg_a}; color: {text_a}; display: flex; align-items: center; padding-left: 15px; font-weight: bold; font-size: 15px; border-radius: 6px 0 0 6px; clip-path: {shape_a}; border: {border_a}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{name_a_display}</div><div style="width: 100px; text-align: center; display: flex; flex-direction: column; justify-content: center; flex-shrink: 0;"><span style="font-size: 11px; color: #999; text-transform: uppercase; margin-bottom: 2px; font-weight: bold;">{subtext}</span><span style="font-size: 18px; font-weight: 800;">{status_text}</span></div><div style="flex: 1; height: 100%; background: {bg_b}; color: {text_b}; display: flex; align-items: center; justify-content: flex-end; padding-right: 15px; font-weight: bold; font-size: 15px; border-radius: 0 6px 6px 0; clip-path: {shape_b}; border: {border_b}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{name_b_display}</div></div><div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">{circles_html}</div></div>"""
     st.html(html_string)
 
 def render_compact_grid(outcomes, total_holes, active_match_id, current_hole):
@@ -240,7 +246,6 @@ def render_compact_grid(outcomes, total_holes, active_match_id, current_hole):
             
             ring = "box-shadow: 0 0 0 3px #1f2937;" if i == current_hole else ""
             
-            # The URL now includes the hidden tab_jump parameter to force Streamlit back to Score Entry!
             row_html += f"<a href='?match_id={active_match_id}&manage=true&hole={i}&tab_jump=Score%20Entry' target='_self' style='text-decoration: none;'>"
             row_html += f"<div class='hole-box' style='width: 32px; height: 32px; border-radius: 6px; background: {bg}; color: {txt}; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: bold; border: 1px solid #e5e7eb; {ring}'>{i}</div>"
             row_html += "</a>"
@@ -280,7 +285,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                 st.rerun()
                 
         st.html("<h4 style='text-align: center; color: #666; margin-top: 10px; font-family: sans-serif;'>Live Matchplay Scoreboard</h4>")
-        render_live_card(match_data, team_names, total_holes)
+        render_live_card(match_data, team_names, shots_received, total_holes)
 
     else:
         # ==========================================
@@ -290,18 +295,14 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
         
         tab_options = ["Scoreboard", "Score Entry", "Shots Allocation", "Share Links"]
         
-        # 1. Ensure we have a default active tab stored in session
         if "manager_active_tab" not in st.session_state:
             st.session_state.manager_active_tab = "Score Entry"
             
-        # 2. Intercept the hidden query param triggered by the interactive HTML grid
         if "tab_jump" in st.query_params:
             st.session_state.manager_active_tab = st.query_params["tab_jump"]
-            # Clear it so it doesn't get stuck in the URL on subsequent interactions
             if "tab_jump" in st.query_params:
                 del st.query_params["tab_jump"]
 
-        # 3. Create the navigation menu using radio buttons (functions exactly like tabs)
         active_tab = st.radio(
             "Manager Navigation", 
             tab_options, 
@@ -312,15 +313,13 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
         st.session_state.manager_active_tab = active_tab
         st.divider()
 
-        # Render corresponding view based on selected tab
         if active_tab == "Scoreboard":
-            render_live_card(match_data, team_names, total_holes)
+            render_live_card(match_data, team_names, shots_received, total_holes)
             
         elif active_tab == "Score Entry":
             leader, amount, holes_played, match_over, final_str = get_match_status(match_data.get("outcomes", {}), total_holes)
             state_key = f"entry_hole_{active_match_id}"
 
-            # Intercept URL param for jumping to a specific hole via grid click
             if "hole" in st.query_params:
                 try:
                     jump_hole = int(st.query_params["hole"])
@@ -331,7 +330,6 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                 if "hole" in st.query_params:
                     del st.query_params["hole"]
 
-            # Initialize state if not set
             if state_key not in st.session_state:
                 if match_over:
                     st.session_state[state_key] = holes_played
@@ -346,7 +344,6 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             else:
                 st.write("Record the outcome below. The system will automatically detect when the match is over.")
 
-            # Render the interactive compact grid
             st.html(render_compact_grid(match_data.get("outcomes", {}), total_holes, active_match_id, curr_hole))
 
             st.divider()
@@ -368,8 +365,12 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             h_data = course_holes[real_hole_idx]
             str_h = str(curr_hole)
             
-            # Default to Halved if the hole has not been recorded yet
             current_val = match_data["outcomes"].get(str_h, "H")
+            
+            shots_a = shots_received.get(team_names['A'], 0)
+            shots_b = shots_received.get(team_names['B'], 0)
+            disp_a = f"{team_names['A']} ({shots_a})" if shots_a > 0 else team_names['A']
+            disp_b = f"{team_names['B']} ({shots_b})" if shots_b > 0 else team_names['B']
 
             with st.container(border=True):
                 st.markdown(f"<div style='text-align:center; color:gray; font-size:14px; margin-bottom:15px;'>Par {h_data['par']} &nbsp;|&nbsp; Index {h_data['index']}</div>", unsafe_allow_html=True)
@@ -379,9 +380,9 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                     options=["Not Played", "A", "H", "B"],
                     format_func=lambda x: {
                         "Not Played": "⚪ Not Played / Clear",
-                        "A": f"🟢 {team_names['A']} Won",
+                        "A": f"🟢 {disp_a} Won",
                         "H": "🔘 Halved",
-                        "B": f"🟣 {team_names['B']} Won"
+                        "B": f"🟣 {disp_b} Won"
                     }[x],
                     index=["Not Played", "A", "H", "B"].index(current_val),
                     horizontal=False,
