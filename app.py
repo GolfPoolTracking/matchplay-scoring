@@ -4,8 +4,18 @@ import math
 import uuid
 import datetime
 
+from supabase import create_client, Client
+
+@st.cache_resource
+def init_connection():
+    url = st.secrets["supabase"]["url"]
+    key = st.secrets["supabase"]["key"]
+    return create_client(url, key)
+
+supabase = init_connection()
+
 # --- App Configuration ---
-st.set_page_config(page_title="SLIM MatchPlay Tracker", layout="centered")
+st.set_page_config(page_title="Matchplay Centre", layout="centered")
 
 BASE_URL = "https://matchplay-scoring.streamlit.app"
 
