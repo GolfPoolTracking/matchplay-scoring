@@ -61,7 +61,6 @@ try:
     st.session_state["db_matches"] = {}
     for row in db_res.data:
         data = row.get("match_data", {})
-        # Ensure we are loading records built for this outcome-based format
         if "setup" in data and "outcomes" in data:
             st.session_state["db_matches"][row["id"]] = data
 except Exception as e:
@@ -136,7 +135,6 @@ def generate_shots_data(match):
     return shots_received, team_names
 
 def get_match_status(outcomes, total_holes):
-    """Calculates match score and identifies if a match is mathematically over."""
     score = 0
     holes_played = 0
     match_over = False
@@ -151,7 +149,6 @@ def get_match_status(outcomes, total_holes):
             
             holes_remaining = total_holes - i
             
-            # Mathematical early finish logic
             if abs(score) > holes_remaining:
                 match_over = True
                 if holes_remaining > 0:
@@ -180,7 +177,6 @@ def render_live_card(match_data, team_names, total_holes):
     
     leader, amount, holes_played, match_over, final_str = get_match_status(outcomes, total_holes)
     
-    # Clean transparent defaults for ALL SQ state
     bg_a, text_a = "transparent", "#333"
     bg_b, text_b = "transparent", "#333"
     shape_a = "none"
@@ -188,7 +184,6 @@ def render_live_card(match_data, team_names, total_holes):
     border_a = "none"
     border_b = "none"
     
-    # Render tiny colored dots next to names when their background is transparent
     name_a_display = f"<span style='display:inline-block; width:10px; height:10px; border-radius:50%; background-color:{COLOR_A}; margin-right:8px;'></span>{team_names['A']}"
     name_b_display = f"{team_names['B']}<span style='display:inline-block; width:10px; height:10px; border-radius:50%; background-color:{COLOR_B}; margin-left:8px;'></span>"
     
@@ -197,17 +192,16 @@ def render_live_card(match_data, team_names, total_holes):
         shape_a = "polygon(0% 0%, 92% 0%, 100% 50%, 92% 100%, 0% 100%)"
         border_a = f"1px solid {COLOR_A}"
         status_text = f"<span style='color: {COLOR_A};'>{final_str}</span>"
-        name_a_display = team_names['A'] # Remove dot since background is colored
+        name_a_display = team_names['A'] 
     elif leader == "B":
         bg_b, text_b = COLOR_B, "white"
         shape_b = "polygon(8% 0%, 100% 0%, 100% 100%, 8% 100%, 0% 50%)"
         border_b = f"1px solid {COLOR_B}"
         status_text = f"<span style='color: {COLOR_B};'>{final_str}</span>"
-        name_b_display = team_names['B'] # Remove dot since background is colored
+        name_b_display = team_names['B'] 
     else:
         status_text = "<span style='color: #555;'>ALL SQ</span>"
 
-    # Generate Hole History Bubbles
     circles_html = ""
     for i in range(1, holes_played + 1):
         res = outcomes.get(str(i))
@@ -244,11 +238,10 @@ def render_compact_grid(outcomes, total_holes, active_match_id, current_hole):
             val = outcomes.get(str(i), "Not Played")
             bg, txt = get_color(val)
             
-            # Add a dark shadow ring if this is the currently selected hole
             ring = "box-shadow: 0 0 0 3px #1f2937;" if i == current_hole else ""
             
-            # Interactive link via query params
-            row_html += f"<a href='?match_id={active_match_id}&manage=true&hole={i}' target='_self' style='text-decoration: none;'>"
+            # The URL now includes the hidden tab_jump parameter to force Streamlit back to Score Entry!
+            row_html += f"<a href='?match_id={active_match_id}&manage=true&hole={i}&tab_jump=Score%20Entry' target='_self' style='text-decoration: none;'>"
             row_html += f"<div class='hole-box' style='width: 32px; height: 32px; border-radius: 6px; background: {bg}; color: {txt}; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: bold; border: 1px solid #e5e7eb; {ring}'>{i}</div>"
             row_html += "</a>"
         row_html += "</div>"
@@ -291,16 +284,39 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
 
     else:
         # ==========================================
-        # MANAGER VIEW
+        # MANAGER VIEW (Custom Tab Implementation)
         # ==========================================
         st.button("⬅ Back to Menu", on_click=lambda: st.query_params.clear())
         
-        tab_board, tab_scores, tab_shots, tab_links = st.tabs(["Scoreboard", "Score Entry", "Shots Allocation", "Share Links"])
+        tab_options = ["Scoreboard", "Score Entry", "Shots Allocation", "Share Links"]
         
-        with tab_board:
+        # 1. Ensure we have a default active tab stored in session
+        if "manager_active_tab" not in st.session_state:
+            st.session_state.manager_active_tab = "Score Entry"
+            
+        # 2. Intercept the hidden query param triggered by the interactive HTML grid
+        if "tab_jump" in st.query_params:
+            st.session_state.manager_active_tab = st.query_params["tab_jump"]
+            # Clear it so it doesn't get stuck in the URL on subsequent interactions
+            if "tab_jump" in st.query_params:
+                del st.query_params["tab_jump"]
+
+        # 3. Create the navigation menu using radio buttons (functions exactly like tabs)
+        active_tab = st.radio(
+            "Manager Navigation", 
+            tab_options, 
+            index=tab_options.index(st.session_state.manager_active_tab) if st.session_state.manager_active_tab in tab_options else 1,
+            horizontal=True, 
+            label_visibility="collapsed"
+        )
+        st.session_state.manager_active_tab = active_tab
+        st.divider()
+
+        # Render corresponding view based on selected tab
+        if active_tab == "Scoreboard":
             render_live_card(match_data, team_names, total_holes)
             
-        with tab_scores:
+        elif active_tab == "Score Entry":
             leader, amount, holes_played, match_over, final_str = get_match_status(match_data.get("outcomes", {}), total_holes)
             state_key = f"entry_hole_{active_match_id}"
 
@@ -312,7 +328,8 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                         st.session_state[state_key] = jump_hole
                 except ValueError:
                     pass
-                del st.query_params["hole"] # Clear so it doesn't get stuck
+                if "hole" in st.query_params:
+                    del st.query_params["hole"]
 
             # Initialize state if not set
             if state_key not in st.session_state:
@@ -394,7 +411,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                 save_match_to_db(active_match_id, match_data)
                 st.rerun()
 
-        with tab_shots:
+        elif active_tab == "Shots Allocation":
             st.header("Handicap Allocation")
             st.write(f"**Format:** {setup['match_type']} ({st.session_state['allowances'][setup['match_type']]}% Allowance)")
             
@@ -417,7 +434,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                 raw_data.append({"Player": p, "HI": data["hi"]})
             st.dataframe(pd.DataFrame(raw_data), hide_index=True)
 
-        with tab_links:
+        elif active_tab == "Share Links":
             st.write("**Public Leaderboard Link (Send to players):**")
             st.code(f"{BASE_URL}/?match_id={active_match_id}")
             st.write("**Manager Link (Keep Private):**")
