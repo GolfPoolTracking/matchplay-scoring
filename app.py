@@ -421,41 +421,53 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             h_data = course_holes[real_hole_idx]
             str_h = str(curr_hole)
             
-            # Form-Free Auto-Advancing Radio Button Callback
-            def on_radio_change():
-                val = st.session_state[f"radio_{active_match_id}_{curr_hole}"]
-                if val == "Not Played":
-                    match_data["outcomes"].pop(str_h, None)
-                else:
-                    match_data["outcomes"][str_h] = val
-                    
-                save_match_to_db(active_match_id, match_data)
-                
-                l, a, hp, mo, fs = get_match_status(match_data["outcomes"], total_holes)
-                
-                if val != "Not Played" and not mo and curr_hole < total_holes:
-                    st.session_state[state_key] += 1
-
             current_val = match_data["outcomes"].get(str_h, "Not Played")
 
             with st.container(border=True):
                 st.markdown(f"<div style='text-align:center; color:gray; font-size:14px; margin-bottom:15px;'>Par {h_data['par']} &nbsp;|&nbsp; Index {h_data['index']}</div>", unsafe_allow_html=True)
                 
-                st.radio(
-                    "Result",
-                    options=["Not Played", "A", "H", "B"],
-                    format_func=lambda x: {
-                        "Not Played": "⚪ Not Played / Clear",
-                        "A": f"🟢 {team_display['A']} Won",
-                        "H": "🔘 Halved",
-                        "B": f"🟣 {team_display['B']} Won"
-                    }[x],
-                    index=["Not Played", "A", "H", "B"].index(current_val),
-                    horizontal=False,
-                    label_visibility="collapsed",
-                    key=f"radio_{active_match_id}_{curr_hole}",
-                    on_change=on_radio_change
-                )
+                status_map = {
+                    "Not Played": "⚪ Not Played",
+                    "A": f"🟢 {team_names['A']} Won",
+                    "H": "🔘 Halved",
+                    "B": f"🟣 {team_names['B']} Won"
+                }
+                
+                bg_color = {"Not Played": "#f3f4f6", "A": "#d1fae5", "H": "#f3f4f6", "B": "#e0e7ff"}.get(current_val, "#f3f4f6")
+                text_color = {"Not Played": "#6b7280", "A": "#065f46", "H": "#6b7280", "B": "#3730a3"}.get(current_val, "#6b7280")
+                st.markdown(f"<div style='text-align:center; font-size:16px; font-weight:bold; margin-bottom:15px; padding:12px; background-color:{bg_color}; color:{text_color}; border-radius:8px;'>Current: {status_map[current_val]}</div>", unsafe_allow_html=True)
+
+                def update_and_advance(val):
+                    if val == "Not Played":
+                        match_data["outcomes"].pop(str_h, None)
+                    else:
+                        match_data["outcomes"][str_h] = val
+                        
+                    save_match_to_db(active_match_id, match_data)
+                    l, a, hp, mo, fs = get_match_status(match_data["outcomes"], total_holes)
+                    
+                    if val != "Not Played" and not mo and curr_hole < total_holes:
+                        st.session_state[state_key] = curr_hole + 1
+
+                # 1-TAP ENTRY SYSTEM (No forms, no radio buttons)
+                colA, colH, colB = st.columns(3)
+                with colA:
+                    if st.button(f"🟢 {team_names['A']} Win", use_container_width=True):
+                        update_and_advance("A")
+                        st.rerun()
+                with colH:
+                    if st.button("🔘 Halved", use_container_width=True):
+                        update_and_advance("H")
+                        st.rerun()
+                with colB:
+                    if st.button(f"🟣 {team_names['B']} Win", use_container_width=True):
+                        update_and_advance("B")
+                        st.rerun()
+                
+                st.write("")
+                if st.button("⚪ Clear Result", use_container_width=True):
+                    update_and_advance("Not Played")
+                    st.rerun()
 
             if not match_over and st.button("➕ Add Extra Hole", use_container_width=True):
                 match_data["extra_holes"] = match_data.get("extra_holes", 0) + 1
@@ -474,7 +486,8 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                 
                 for p_name, total_shots in shots_received.items():
                     strokes_on_this_hole = allocate_strokes(total_shots, h_data['index'])
-                    row[p_name] = "*" * strokes_on_this_hole if strokes_on_this_hole > 0 else "-"
+                    # Now outputs the explicit integer instead of an asterisk string
+                    row[p_name] = strokes_on_this_hole if strokes_on_this_hole > 0 else "-"
                     
                 grid_data.append(row)
                 
