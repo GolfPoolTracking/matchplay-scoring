@@ -61,7 +61,6 @@ try:
     st.session_state["db_matches"] = {}
     for row in db_res.data:
         data = row.get("match_data", {})
-        # Ensure we are loading records built for this outcome-based format
         if "setup" in data and "outcomes" in data:
             st.session_state["db_matches"][row["id"]] = data
 except Exception as e:
@@ -91,7 +90,6 @@ def generate_shots_data(match):
     team_names = {"A": "", "B": ""}
     team_display = {"A": "", "B": ""}
     
-    # Safely extract explicit team arrays to prevent any mix-ups
     if "team_a" in setup and "team_b" in setup:
         p_A = setup["team_a"]
         p_B = setup["team_b"]
@@ -118,8 +116,8 @@ def generate_shots_data(match):
             
         sh_a = shots_received.get(team_names["A"], 0)
         sh_b = shots_received.get(team_names["B"], 0)
-        team_display["A"] = f"{team_names['A']} ({sh_a})" if sh_a > 0 else team_names["A"]
-        team_display["B"] = f"{team_names['B']} ({sh_b})" if sh_b > 0 else team_names["B"]
+        team_display["A"] = f"{team_names['A']} ({sh_a} Shots)" if sh_a > 0 else team_names["A"]
+        team_display["B"] = f"{team_names['B']} ({sh_b} Shots)" if sh_b > 0 else team_names["B"]
 
     elif setup["match_type"] == "Fourball":
         team_names["A"] = f"{p_A[0]} & {p_A[1]}"
@@ -167,8 +165,8 @@ def generate_shots_data(match):
         
         sh_a = shots_received[team_names["A"]]
         sh_b = shots_received[team_names["B"]]
-        team_display["A"] = f"{team_names['A']} ({sh_a})" if sh_a > 0 else team_names["A"]
-        team_display["B"] = f"{team_names['B']} ({sh_b})" if sh_b > 0 else team_names["B"]
+        team_display["A"] = f"{team_names['A']} ({sh_a} Shots)" if sh_a > 0 else team_names["A"]
+        team_display["B"] = f"{team_names['B']} ({sh_b} Shots)" if sh_b > 0 else team_names["B"]
 
     return shots_received, team_names, team_display
 
@@ -278,7 +276,7 @@ def render_live_card(match_data, team_display, total_holes):
     """
     st.html(html_string.replace('\n', ''))
 
-def render_compact_grid(outcomes, total_holes, active_match_id, current_hole):
+def render_compact_grid(outcomes, total_holes, active_match_id, current_hole, holes_format):
     def get_color(hole_val):
         if hole_val == "A": return COLOR_A, "white"
         if hole_val == "B": return COLOR_B, "white"
@@ -290,12 +288,15 @@ def render_compact_grid(outcomes, total_holes, active_match_id, current_hole):
     .hole-box { transition: transform 0.1s, opacity 0.1s; cursor: pointer; }
     .hole-box:hover { transform: scale(1.1); opacity: 0.8; }
     </style>
-    <div style='display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; font-family: sans-serif;'>
+    <div style='overflow-x: auto; padding-bottom: 10px; margin-bottom: 20px;'>
+    <div style='display: flex; flex-direction: column; gap: 8px; width: max-content; font-family: sans-serif; margin: 0 auto;'>
     """
     
     def make_row(start, end):
-        row_html = "<div style='display: flex; gap: 6px; justify-content: center;'>"
-        for i in range(start, end + 1):
+        if start > total_holes: return ""
+        actual_end = min(end, total_holes)
+        row_html = "<div style='display: flex; gap: 6px;'>"
+        for i in range(start, actual_end + 1):
             val = outcomes.get(str(i), "Not Played")
             bg, txt = get_color(val)
             ring = "box-shadow: 0 0 0 3px #1f2937;" if i == current_hole else ""
@@ -305,13 +306,19 @@ def render_compact_grid(outcomes, total_holes, active_match_id, current_hole):
         row_html += "</div>"
         return row_html
 
-    html += make_row(1, min(9, total_holes))
-    if total_holes >= 10:
-        html += make_row(10, min(18, total_holes))
-    if total_holes > 18:
-        html += make_row(19, total_holes)
+    # Dynamic 2-row layouts based on match format
+    if holes_format == 36:
+        html += make_row(1, 18)
+        html += make_row(19, 36)
+        if total_holes > 36:
+            html += make_row(37, total_holes)
+    else:
+        html += make_row(1, 9)
+        html += make_row(10, 18)
+        if total_holes > 18:
+            html += make_row(19, total_holes)
 
-    html += "</div>"
+    html += "</div></div>"
     return html
 
 # --- Routing Logic ---
@@ -323,7 +330,8 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
     match_data = st.session_state["db_matches"][active_match_id]
     setup = match_data["setup"]
     course_holes = st.session_state["courses"][setup["course"]]["holes"]
-    total_holes = 18 + match_data.get("extra_holes", 0)
+    holes_format = setup.get("holes_format", 18)
+    total_holes = holes_format + match_data.get("extra_holes", 0)
     
     shots_received, team_names, team_display = generate_shots_data(match_data)
     
@@ -333,14 +341,13 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             if st.button("🔄 Refresh Scoreboard", use_container_width=True):
                 st.rerun()
                 
-        st.markdown(f"<h3 style='text-align: center; color: #333; margin-top: 10px;'>{setup['match_name']}</h3>", unsafe_allow_html=True)
+        st.markdown(f"<h3 style='text-align: center; color: #333; margin-top: 10px; margin-bottom: 0;'>{setup['match_name']}</h3>", unsafe_allow_html=True)
         st.markdown(f"<p style='text-align: center; color: #666; margin-bottom: 20px;'>{setup['course']} • {setup['match_type']}</p>", unsafe_allow_html=True)
         render_live_card(match_data, team_display, total_holes)
 
     else:
         st.button("⬅ Back to Menu", on_click=lambda: st.query_params.clear())
         
-        # New Explicit Header for Manager
         st.markdown(f"<h3 style='text-align: center; color: #1f2937; margin-top: 5px; margin-bottom: 0px;'>⚙️ {setup['match_name']}</h3>", unsafe_allow_html=True)
         st.caption(f"<div style='text-align: center; margin-bottom: 20px;'>{setup['course']} | {setup['match_type']}</div>", unsafe_allow_html=True)
         
@@ -393,7 +400,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                 winner = team_names[leader] if leader in team_names else "Match"
                 st.success(f"🎉 **Match Finished!** {winner} wins {final_str}")
             
-            st.html(render_compact_grid(match_data.get("outcomes", {}), total_holes, active_match_id, curr_hole))
+            st.html(render_compact_grid(match_data.get("outcomes", {}), total_holes, active_match_id, curr_hole, holes_format))
 
             st.divider()
             c1, c2, c3 = st.columns([1, 2, 1])
@@ -414,13 +421,27 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             h_data = course_holes[real_hole_idx]
             str_h = str(curr_hole)
             
-            current_val = match_data["outcomes"].get(str_h, "H")
+            # Form-Free Auto-Advancing Radio Button Callback
+            def on_radio_change():
+                val = st.session_state[f"radio_{active_match_id}_{curr_hole}"]
+                if val == "Not Played":
+                    match_data["outcomes"].pop(str_h, None)
+                else:
+                    match_data["outcomes"][str_h] = val
+                    
+                save_match_to_db(active_match_id, match_data)
+                
+                l, a, hp, mo, fs = get_match_status(match_data["outcomes"], total_holes)
+                
+                if val != "Not Played" and not mo and curr_hole < total_holes:
+                    st.session_state[state_key] += 1
 
-            # Wrapping in a form fixes the rapid-click bug for radio buttons!
-            with st.form(key=f"outcome_form_hole_{curr_hole}", border=True):
+            current_val = match_data["outcomes"].get(str_h, "Not Played")
+
+            with st.container(border=True):
                 st.markdown(f"<div style='text-align:center; color:gray; font-size:14px; margin-bottom:15px;'>Par {h_data['par']} &nbsp;|&nbsp; Index {h_data['index']}</div>", unsafe_allow_html=True)
                 
-                outcome = st.radio(
+                st.radio(
                     "Result",
                     options=["Not Played", "A", "H", "B"],
                     format_func=lambda x: {
@@ -431,26 +452,10 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                     }[x],
                     index=["Not Played", "A", "H", "B"].index(current_val),
                     horizontal=False,
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
+                    key=f"radio_{active_match_id}_{curr_hole}",
+                    on_change=on_radio_change
                 )
-                
-                st.write("")
-                submit_label = "✅ Save & Next" if not match_over else "✅ Save Update"
-                
-                if st.form_submit_button(submit_label, type="primary", use_container_width=True):
-                    if outcome == "Not Played":
-                        match_data["outcomes"].pop(str_h, None)
-                    else:
-                        match_data["outcomes"][str_h] = outcome
-                    
-                    save_match_to_db(active_match_id, match_data)
-                    
-                    l, a, hp, mo, fs = get_match_status(match_data["outcomes"], total_holes)
-                    
-                    if outcome != "Not Played" and not mo and curr_hole < total_holes:
-                        st.session_state[state_key] += 1
-                        
-                    st.rerun()
 
             if not match_over and st.button("➕ Add Extra Hole", use_container_width=True):
                 match_data["extra_holes"] = match_data.get("extra_holes", 0) + 1
@@ -462,8 +467,9 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             st.write(f"**Format:** {setup['match_type']} ({st.session_state['allowances'][setup['match_type']]}% Allowance)")
             
             grid_data = []
-            for idx in range(18):
-                h_data = course_holes[idx]
+            for idx in range(total_holes):
+                real_idx = idx % 18
+                h_data = course_holes[real_idx]
                 row = {"Hole": idx + 1, "Par": h_data['par'], "Index": h_data['index']}
                 
                 for p_name, total_shots in shots_received.items():
@@ -487,7 +493,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             with st.form("edit_match_form"):
                 new_name = st.text_input("Match Name", value=setup["match_name"])
                 
-                c1, c2 = st.columns(2)
+                c1, c2, c3 = st.columns([2, 1, 1])
                 c_list = list(st.session_state["courses"].keys())
                 c_idx = c_list.index(setup["course"]) if setup["course"] in c_list else 0
                 with c1: 
@@ -497,6 +503,8 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                 t_idx = t_list.index(setup["tee"]) if setup["tee"] in t_list else 0
                 with c2: 
                     new_tee = st.selectbox("Tees", t_list, index=t_idx)
+                with c3:
+                    new_format = st.selectbox("Format", [18, 36], format_func=lambda x: f"{x} Holes", index=[18, 36].index(holes_format))
                     
                 new_uh = st.checkbox("Use Handicaps", value=setup.get("use_handicaps", True))
                 
@@ -521,6 +529,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                         match_data["setup"]["match_name"] = new_name
                         match_data["setup"]["course"] = new_course
                         match_data["setup"]["tee"] = new_tee
+                        match_data["setup"]["holes_format"] = new_format
                         match_data["setup"]["use_handicaps"] = new_uh
                         match_data["setup"]["players"] = new_players
                         match_data["setup"]["team_a"] = [e_a1]
@@ -559,6 +568,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                         match_data["setup"]["match_name"] = new_name
                         match_data["setup"]["course"] = new_course
                         match_data["setup"]["tee"] = new_tee
+                        match_data["setup"]["holes_format"] = new_format
                         match_data["setup"]["use_handicaps"] = new_uh
                         match_data["setup"]["players"] = new_players
                         match_data["setup"]["team_a"] = [e_a1, e_a2]
@@ -603,7 +613,8 @@ else:
             for m_id, m_data in st.session_state["db_matches"].items():
                 with st.container(border=True):
                     st.subheader(m_data["setup"]["match_name"])
-                    st.write(f"{m_data['setup']['date']} | {m_data['setup']['course']} | {m_data['setup']['match_type']}")
+                    fmt_holes = m_data["setup"].get("holes_format", 18)
+                    st.write(f"{m_data['setup']['date']} | {m_data['setup']['course']} ({fmt_holes} Holes) | {m_data['setup']['match_type']}")
                     if st.button("Manage Match", key=f"open_{m_id}"):
                         st.query_params["match_id"] = m_id
                         st.query_params["manage"] = "true"
@@ -614,13 +625,14 @@ else:
         match_name = st.text_input("Match Name", placeholder="e.g. Sunday Final")
         match_date = st.date_input("Date", value=datetime.date.today())
         
-        c1, c2 = st.columns(2)
+        c1, c2, c3 = st.columns([2, 1, 1])
         with c1: selected_course = st.selectbox("Select Course", list(st.session_state["courses"].keys()))
         with c2: selected_tee = st.selectbox("Select Tees", list(st.session_state["courses"][selected_course]["tees"].keys()))
+        with c3: holes_format = st.selectbox("Format", [18, 36], format_func=lambda x: f"{x} Holes")
         
-        c3, c4 = st.columns(2)
-        with c3: match_type = st.selectbox("Match Type", ["Singles", "Fourball", "Foursomes"])
-        with c4: use_handicaps = st.checkbox("Use Handicaps", value=True)
+        c4, c5 = st.columns(2)
+        with c4: match_type = st.selectbox("Match Type", ["Singles", "Fourball", "Foursomes"])
+        with c5: use_handicaps = st.checkbox("Use Handicaps", value=True)
         
         st.divider()
         st.subheader("Players & Handicaps")
@@ -649,6 +661,7 @@ else:
                             "date": match_date.strftime('%d %b %Y'),
                             "course": selected_course,
                             "tee": selected_tee,
+                            "holes_format": holes_format,
                             "match_type": match_type,
                             "use_handicaps": use_handicaps,
                             "players": players,
@@ -698,6 +711,7 @@ else:
                             "date": match_date.strftime('%d %b %Y'),
                             "course": selected_course,
                             "tee": selected_tee,
+                            "holes_format": holes_format,
                             "match_type": match_type,
                             "use_handicaps": use_handicaps,
                             "players": players,
