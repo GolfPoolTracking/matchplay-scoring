@@ -250,7 +250,13 @@ def render_live_card(match_data, team_display, total_holes):
         elif res == "H":
             circles_html += f"<div style='width: 24px; height: 24px; border-radius: 50%; background: {COLOR_H}; color: white; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold;'>{i}</div>"
 
-    subtext = "FINAL" if match_over else f"Thru {holes_played}"
+    # Set subtext dynamically
+    if match_over:
+        subtext = "FINAL"
+    elif holes_played == 0:
+        subtext = "NOT STARTED"
+    else:
+        subtext = f"THRU {holes_played}"
 
     html_string = f"""
     <div style="background: white; border: 1px solid #eaeaea; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 20px; margin-top: 10px; font-family: sans-serif;">
@@ -352,7 +358,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
 
     else:
         # ==========================================
-        # MANAGER VIEW
+        # MANAGER VIEW (Custom Tab Implementation)
         # ==========================================
         st.button("⬅ Back to Menu", on_click=lambda: st.query_params.clear())
         
@@ -428,13 +434,11 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             h_data = course_holes[real_hole_idx]
             str_h = str(curr_hole)
             
-            # Default to Halved if the hole has not been recorded yet
             current_val = match_data["outcomes"].get(str_h, "H")
 
             with st.container(border=True):
                 st.markdown(f"<div style='text-align:center; color:gray; font-size:14px; margin-bottom:15px;'>Par {h_data['par']} &nbsp;|&nbsp; Index {h_data['index']}</div>", unsafe_allow_html=True)
                 
-                # Dynamic key added to prevent Streamlit from holding onto old radio button selections!
                 outcome = st.radio(
                     "Result",
                     options=["Not Played", "A", "H", "B"],
