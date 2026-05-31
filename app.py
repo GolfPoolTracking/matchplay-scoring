@@ -3,7 +3,7 @@ import pandas as pd
 import math
 
 # --- App Configuration ---
-st.set_page_config(page_title="MatchPlay Scoring App", layout="centered") # Centered is better for mobile
+st.set_page_config(page_title="MatchPlay Tracker", layout="centered")
 
 # --- Default Data Setup ---
 if "courses" not in st.session_state:
@@ -42,7 +42,7 @@ if "match_scores" not in st.session_state:
 
 # --- Helper Functions ---
 def calculate_course_handicap(hi, slope, rating, par):
-    return round((hi * (slope / 113)) + (rating - par))
+    return round((hi * (slope / 113.0)) + (rating - par))
 
 def allocate_strokes(shots_received, hole_index):
     strokes = 0
@@ -86,21 +86,21 @@ with tab_setup:
     elif match_type == "Fourball":
         with col1:
             st.subheader("Team A")
-            players["Team A - P1"] = st.number_input("Player 1 HI", value=10.0, step=0.1, format="%.1f", key="fa1")
-            players["Team A - P2"] = st.number_input("Player 2 HI", value=12.0, step=0.1, format="%.1f", key="fa2")
+            players["Team A - P1"] = st.number_input("Player 1 HI", min_value=-5.0, max_value=54.0, value=10.0, step=0.1, format="%.1f", key="fa1")
+            players["Team A - P2"] = st.number_input("Player 2 HI", min_value=-5.0, max_value=54.0, value=12.0, step=0.1, format="%.1f", key="fa2")
         with col2:
             st.subheader("Team B")
-            players["Team B - P1"] = st.number_input("Player 1 HI", value=14.0, step=0.1, format="%.1f", key="fb1")
-            players["Team B - P2"] = st.number_input("Player 2 HI", value=18.0, step=0.1, format="%.1f", key="fb2")
+            players["Team B - P1"] = st.number_input("Player 1 HI", min_value=-5.0, max_value=54.0, value=14.0, step=0.1, format="%.1f", key="fb1")
+            players["Team B - P2"] = st.number_input("Player 2 HI", min_value=-5.0, max_value=54.0, value=18.0, step=0.1, format="%.1f", key="fb2")
     elif match_type == "Foursomes":
         with col1:
             st.subheader("Team A")
-            players["Team A - P1"] = st.number_input("Player 1 HI", value=10.0, step=0.1, format="%.1f", key="fsa1")
-            players["Team A - P2"] = st.number_input("Player 2 HI", value=12.0, step=0.1, format="%.1f", key="fsa2")
+            players["Team A - P1"] = st.number_input("Player 1 HI", min_value=-5.0, max_value=54.0, value=10.0, step=0.1, format="%.1f", key="fsa1")
+            players["Team A - P2"] = st.number_input("Player 2 HI", min_value=-5.0, max_value=54.0, value=12.0, step=0.1, format="%.1f", key="fsa2")
         with col2:
             st.subheader("Team B")
-            players["Team B - P1"] = st.number_input("Player 1 HI", value=15.0, step=0.1, format="%.1f", key="fsb1")
-            players["Team B - P2"] = st.number_input("Player 2 HI", value=15.0, step=0.1, format="%.1f", key="fsb2")
+            players["Team B - P1"] = st.number_input("Player 1 HI", min_value=-5.0, max_value=54.0, value=15.0, step=0.1, format="%.1f", key="fsb1")
+            players["Team B - P2"] = st.number_input("Player 2 HI", min_value=-5.0, max_value=54.0, value=15.0, step=0.1, format="%.1f", key="fsb2")
 
     if st.button("Initialize & Calculate", type="primary", use_container_width=True):
         st.session_state["match_setup"] = {
@@ -152,7 +152,7 @@ with tab_setup:
         st.dataframe(pd.DataFrame(calc_data), use_container_width=True)
 
 # ==========================================
-# TAB 2: SCORECARD (MOBILE OPTIMIZED)
+# TAB 2: SCORECARD
 # ==========================================
 with tab_scoring:
     if "match_setup" not in st.session_state:
@@ -162,14 +162,13 @@ with tab_scoring:
         course_holes = st.session_state["courses"][setup["course"]]["holes"]
         allowance_decimal = st.session_state["allowances"][setup["match_type"]] / 100.0
         
-        # Calculate Shots Received
         shots_received = {}
         if setup["match_type"] in ["Singles", "Fourball"]:
             ch_dict = {p: calculate_course_handicap(hi, setup["tee_data"]["slope"], setup["tee_data"]["rating"], setup["tee_data"]["par"]) for p, hi in setup["players"].items()}
             lowest_ch = min(ch_dict.values())
             for p, ch in ch_dict.items():
                 shots_received[p] = round((ch - lowest_ch) * allowance_decimal)
-        else: # Foursomes
+        else: 
             team_a_ch = calculate_course_handicap(setup["players"]["Team A - P1"], setup["tee_data"]["slope"], setup["tee_data"]["rating"], setup["tee_data"]["par"]) + \
                         calculate_course_handicap(setup["players"]["Team A - P2"], setup["tee_data"]["slope"], setup["tee_data"]["rating"], setup["tee_data"]["par"])
             team_b_ch = calculate_course_handicap(setup["players"]["Team B - P1"], setup["tee_data"]["slope"], setup["tee_data"]["rating"], setup["tee_data"]["par"]) + \
@@ -182,7 +181,6 @@ with tab_scoring:
         total_holes = 18 + st.session_state["extra_holes"]
         score_options = ["-"] + list(range(1, 16))
 
-        # Determine Overall Match Status FIRST so we can pin it at the top
         current_match_score = 0
         holes_played = 0
 
@@ -192,7 +190,6 @@ with tab_scoring:
                 scores = st.session_state["match_scores"][hole_key]
                 net_scores = {}
                 
-                # Calculate net scores for valid inputs
                 for p in player_entities:
                     s = scores.get(p, "-")
                     if s != "-":
@@ -200,25 +197,23 @@ with tab_scoring:
                         stars = len(allocate_strokes(shots_received[p], hole_index))
                         net_scores[p] = s - stars
 
-                # Evaluate hole winner based on match type
                 if setup["match_type"] == "Fourball":
                     team_a_nets = [net_scores[p] for p in player_entities[:2] if p in net_scores]
                     team_b_nets = [net_scores[p] for p in player_entities[2:] if p in net_scores]
                     
-                    if team_a_nets and team_b_nets: # Both teams have at least one valid score
+                    if team_a_nets and team_b_nets: 
                         best_a = min(team_a_nets)
                         best_b = min(team_b_nets)
                         if best_a < best_b: current_match_score += 1
                         elif best_b < best_a: current_match_score -= 1
                         holes_played += 1
-                else: # Singles or Foursomes
+                else: 
                     if len(net_scores) == 2:
                         p1, p2 = player_entities[0], player_entities[1]
                         if net_scores[p1] < net_scores[p2]: current_match_score += 1
                         elif net_scores[p2] < net_scores[p1]: current_match_score -= 1
                         holes_played += 1
 
-        # Display Top Status Bar
         st.markdown("---")
         if current_match_score > 0:
             leader = "Team A" if setup["match_type"] != "Singles" else player_entities[0]
@@ -232,7 +227,6 @@ with tab_scoring:
         st.caption(f"<div style='text-align: center;'>Thru {holes_played} holes</div>", unsafe_allow_html=True)
         st.markdown("---")
 
-        # Mobile-Friendly Scorecard using Expanders
         st.write("**Enter Gross Scores Below**")
         for idx in range(total_holes):
             real_hole_idx = idx % 18
@@ -242,7 +236,6 @@ with tab_scoring:
             if hole_key not in st.session_state["match_scores"]:
                 st.session_state["match_scores"][hole_key] = {p: "-" for p in player_entities}
 
-            # Check if this hole has been scored
             is_scored = any(st.session_state["match_scores"][hole_key][p] != "-" for p in player_entities)
             expander_title = f"⛳ Hole {idx + 1}  |  Par {hole_data['par']}  |  Index {hole_data['index']}"
             if is_scored: expander_title += "  ✅"
@@ -254,7 +247,6 @@ with tab_scoring:
                         asterisks = allocate_strokes(shots_received[p], hole_data["index"])
                         display_name = p.replace("Team A - ", "").replace("Team B - ", "")
                         
-                        # Dropdown for score
                         current_val = st.session_state["match_scores"][hole_key][p]
                         idx_val = score_options.index(current_val) if current_val in score_options else 0
                         
@@ -266,7 +258,6 @@ with tab_scoring:
                         )
                         st.session_state["match_scores"][hole_key][p] = selected_score
                         
-                        # Show Net Score instantly
                         if selected_score != "-":
                             net = selected_score - len(asterisks)
                             st.caption(f"Net: **{net}**")
@@ -283,9 +274,12 @@ with tab_admin:
     st.write("Set global handicap allowances for match formats. Integers only.")
     
     c1, c2, c3 = st.columns(3)
-    with c1: st.session_state["allowances"]["Singles"] = st.number_input("Singles (%)", value=st.session_state["allowances"]["Singles"], step=1)
-    with c2: st.session_state["allowances"]["Fourball"] = st.number_input("Fourball (%)", value=st.session_state["allowances"]["Fourball"], step=1)
-    with c3: st.session_state["allowances"]["Foursomes"] = st.number_input("Foursomes (%)", value=st.session_state["allowances"]["Foursomes"], step=1)
+    with c1: 
+        st.session_state["allowances"]["Singles"] = int(st.number_input("Singles (%)", value=int(st.session_state["allowances"]["Singles"]), step=1))
+    with c2: 
+        st.session_state["allowances"]["Fourball"] = int(st.number_input("Fourball (%)", value=int(st.session_state["allowances"]["Fourball"]), step=1))
+    with c3: 
+        st.session_state["allowances"]["Foursomes"] = int(st.number_input("Foursomes (%)", value=int(st.session_state["allowances"]["Foursomes"]), step=1))
     
     st.divider()
     st.subheader("Course Database")
