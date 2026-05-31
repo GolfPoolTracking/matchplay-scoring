@@ -197,21 +197,25 @@ def render_live_card(match_data, team_names):
         
         <div style="display: flex; align-items: center; justify-content: space-between; height: 65px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px;">
             
+            <!-- Team A Side -->
             <div style="flex: 1; height: 100%; background: {bg_a}; color: {text_a}; display: flex; align-items: center; padding-left: 15px; font-weight: bold; font-size: 15px; border-radius: 6px 0 0 6px; clip-path: {shape_a}; border: {border_a};">
                 {team_names['A']}
             </div>
             
+            <!-- Center Status -->
             <div style="width: 100px; text-align: center; display: flex; flex-direction: column; justify-content: center;">
                 <span style="font-size: 11px; color: #999; text-transform: uppercase; margin-bottom: 2px;">Thru {holes_played}</span>
                 <span style="font-size: 18px; font-weight: 800;">{status_text}</span>
             </div>
             
+            <!-- Team B Side -->
             <div style="flex: 1; height: 100%; background: {bg_b}; color: {text_b}; display: flex; align-items: center; justify-content: flex-end; padding-right: 15px; font-weight: bold; font-size: 15px; border-radius: 0 6px 6px 0; clip-path: {shape_b}; border: {border_b};">
                 {team_names['B']}
             </div>
             
         </div>
         
+        <!-- History Bubbles -->
         <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
             {circles_html}
         </div>
