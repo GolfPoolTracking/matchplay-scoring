@@ -7,9 +7,10 @@ import datetime
 # --- App Configuration ---
 st.set_page_config(page_title="SLIM MatchPlay Tracker", layout="centered")
 
+BASE_URL = "https://matchplay-scoring.streamlit.app"
+
 # --- WHS Custom Rounding ---
 def whs_round(val):
-    """WHS dictates that .5 always rounds UP. Python's default round() rounds to nearest even."""
     return int(math.floor(val + 0.5))
 
 # --- Default Data Setup ---
@@ -38,19 +39,15 @@ if "allowances" not in st.session_state:
     st.session_state["allowances"] = {"Singles": 100, "Fourball": 90, "Foursomes": 50}
 
 if "db_matches" not in st.session_state:
-    st.session_state["db_matches"] = {} # Simulating a Supabase table
+    st.session_state["db_matches"] = {} # PLACEHOLDER FOR SUPABASE
 
 # --- Helper Functions ---
 def calculate_course_handicap(hi, slope, rating, par):
     return whs_round((hi * (slope / 113.0)) + (rating - par))
 
 def allocate_strokes(shots_received, hole_index):
-    strokes = 0
-    if shots_received > 0:
-        strokes = shots_received // 18
-        remainder = shots_received % 18
-        if hole_index <= remainder:
-            strokes += 1
+    if shots_received <= 0: return ""
+    strokes = shots_received // 18 + (1 if hole_index <= (shots_received % 18) else 0)
     return "*" * strokes
 
 def calculate_shots_received(match):
@@ -86,6 +83,7 @@ def calculate_shots_received(match):
 # --- Routing Logic ---
 query_params = st.query_params
 active_match_id = query_params.get("match_id", None)
+is_manager = query_params.get("manage", "false").lower() == "true"
 
 if active_match_id and active_match_id in st.session_state["db_matches"]:
     # ==========================================
@@ -103,20 +101,21 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
         st.rerun()
     
     st.title(f"⛳ {setup['match_name']}")
-    st.caption(f"{setup['date'].strftime('%d %b %Y')} | {setup['course']} ({setup['tee']}) | {setup['match_type']}")
+    st.caption(f"{setup['date'].strftime('%d %b %Y')} | {setup['course']} | {setup['match_type']}")
+    if not is_manager:
+        st.info("👁️ **Read-Only Mode:** You are viewing the live public scorecard.")
     
-    tab_scorecard, tab_breakdown, tab_edit = st.tabs(["Scorecard", "Handicap Breakdown", "Edit Match"])
+    tab_scorecard, tab_breakdown, tab_manager = st.tabs(["Scorecard", "Handicaps", "Manager Links"])
     
     with tab_scorecard:
         current_match_score = 0
-        holes_played = 0
+        holes_played = match.get("current_hole", 0)
 
         # Calculate Overall Status
         for idx in range(total_holes):
-            if idx in match["scores"]:
+            if idx in match["scores"] and idx < holes_played:
                 scores = match["scores"][idx]
                 net_scores = {}
-                
                 for p in player_entities:
                     s = scores.get(p, "NR")
                     if s != "NR":
@@ -131,13 +130,11 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                         best_a, best_b = min(team_a_nets), min(team_b_nets)
                         if best_a < best_b: current_match_score += 1
                         elif best_b < best_a: current_match_score -= 1
-                        holes_played += 1
                 else: 
                     if len(net_scores) == 2:
                         p1, p2 = player_entities[0], player_entities[1]
                         if net_scores[p1] < net_scores[p2]: current_match_score += 1
                         elif net_scores[p2] < net_scores[p1]: current_match_score -= 1
-                        holes_played += 1
 
         # Display Top Status Bar
         st.markdown("---")
@@ -153,20 +150,26 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
         st.markdown("---")
 
         # Score Entry UI
+        view_all = st.checkbox("View Full Scorecard", value=not is_manager)
+
         for idx in range(total_holes):
+            # Only show completed holes if view_all is checked.
+            # If manager, always show the *current* active hole.
+            if not view_all and idx != holes_played:
+                continue
+                
             real_hole_idx = idx % 18
             hole_data = course_holes[real_hole_idx]
             par = hole_data['par']
             
-            # Initialize scores with Par by default
             if idx not in match["scores"]:
                 match["scores"][idx] = {p: par for p in player_entities}
             
-            is_scored = any(match["scores"][idx][p] != par for p in player_entities)
+            is_active_hole = (idx == holes_played)
             expander_title = f"⛳ Hole {idx + 1} | Par {par} | Index {hole_data['index']}"
-            if is_scored: expander_title += " ✅"
+            if idx < holes_played: expander_title += " ✅"
 
-            with st.expander(expander_title, expanded=(idx == holes_played)):
+            with st.expander(expander_title, expanded=(is_active_hole or not view_all)):
                 for p in player_entities:
                     asterisks = allocate_strokes(shots_received[p], hole_data["index"])
                     st.markdown(f"**{p}** {asterisks}")
@@ -174,29 +177,39 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                     c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
                     current_val = match["scores"][idx][p]
                     
-                    with c1:
-                        if st.button("➖", key=f"dec_{idx}_{p}", use_container_width=True):
-                            if isinstance(current_val, int) and current_val > 1:
-                                match["scores"][idx][p] -= 1
+                    if is_manager and (is_active_hole or view_all):
+                        with c1:
+                            if st.button("➖", key=f"dec_{idx}_{p}", use_container_width=True):
+                                if isinstance(current_val, int) and current_val > 1:
+                                    match["scores"][idx][p] -= 1
+                                    st.rerun()
+                        with c2:
+                            st.markdown(f"<h3 style='text-align:center; margin:0;'>{current_val}</h3>", unsafe_allow_html=True)
+                        with c3:
+                            if st.button("➕", key=f"inc_{idx}_{p}", use_container_width=True):
+                                if current_val == "NR": match["scores"][idx][p] = par
+                                else: match["scores"][idx][p] += 1
                                 st.rerun()
-                    with c2:
-                        st.markdown(f"<h3 style='text-align:center; margin:0;'>{current_val}</h3>", unsafe_allow_html=True)
-                    with c3:
-                        if st.button("➕", key=f"inc_{idx}_{p}", use_container_width=True):
-                            if current_val == "NR": match["scores"][idx][p] = par
-                            else: match["scores"][idx][p] += 1
-                            st.rerun()
-                    with c4:
-                        if st.button("NR", key=f"nr_{idx}_{p}", use_container_width=True):
-                            match["scores"][idx][p] = "NR"
-                            st.rerun()
+                        with c4:
+                            if st.button("NR", key=f"nr_{idx}_{p}", use_container_width=True):
+                                match["scores"][idx][p] = "NR"
+                                st.rerun()
+                    else:
+                        st.markdown(f"<h3 style='text-align:center;'>{current_val}</h3>", unsafe_allow_html=True)
                     
                     if current_val != "NR":
                         net = current_val - len(asterisks)
                         st.caption(f"Net: {net}")
                     st.divider()
+                
+                # Confirm Button for Manager
+                if is_manager and is_active_hole:
+                    if st.button(f"✅ Confirm Hole {idx + 1} Scores", type="primary", use_container_width=True):
+                        match["current_hole"] = idx + 1
+                        # UPDATE SUPABASE HERE in the future
+                        st.rerun()
 
-        if st.button("➕ Add Extra Hole", use_container_width=True):
+        if is_manager and st.button("➕ Add Extra Hole", use_container_width=True):
             match["extra_holes"] = match.get("extra_holes", 0) + 1
             st.rerun()
 
@@ -207,22 +220,22 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
         
         calc_data = []
         for p, data in setup["players"].items():
-            calc_data.append({"Player": p, "HI": data["hi"], "Shots Received": shots_received.get(p, 0)})
+            if setup.get("use_handicaps", True):
+                calc_data.append({"Player": p, "HI": data["hi"], "Shots Received": shots_received.get(p, 0)})
+            else:
+                calc_data.append({"Player": p, "HI": "N/A", "Shots Received": 0})
         st.dataframe(pd.DataFrame(calc_data), use_container_width=True)
-        
-        st.subheader("Public Share Link")
-        st.code(f"https://your-app-url.streamlit.app/?match_id={active_match_id}")
 
-    with tab_edit:
-        st.warning("Make changes to the setup here. Note: Changing match type or removing players may reset scorecard data.")
-        new_name = st.text_input("Match Name", value=setup["match_name"])
-        new_use_hc = st.checkbox("Use Handicaps", value=setup.get("use_handicaps", True), key="edit_hc")
-        
-        if st.button("Save Changes", type="primary"):
-            st.session_state["db_matches"][active_match_id]["setup"]["match_name"] = new_name
-            st.session_state["db_matches"][active_match_id]["setup"]["use_handicaps"] = new_use_hc
-            st.success("Updated!")
-            st.rerun()
+    with tab_manager:
+        if is_manager:
+            st.success("You are the Manager of this match.")
+            st.write("**Public Link (Read-Only - Send to Group):**")
+            st.code(f"{BASE_URL}/?match_id={active_match_id}")
+            
+            st.write("**Manager Link (Keep Private):**")
+            st.code(f"{BASE_URL}/?match_id={active_match_id}&manage=true")
+        else:
+            st.error("You are in Read-Only mode. Ask the match creator for the manager link to enter scores.")
 
 else:
     # ==========================================
@@ -234,19 +247,20 @@ else:
     
     with tab_list:
         if not st.session_state["db_matches"]:
-            st.info("No matches found. Create one in the next tab!")
+            st.info("No matches found in your current browser session. Create one in the next tab!")
         else:
             for m_id, m_data in st.session_state["db_matches"].items():
                 with st.container(border=True):
                     st.subheader(m_data["setup"]["match_name"])
                     st.write(f"{m_data['setup']['date'].strftime('%d %b %Y')} | {m_data['setup']['course']} | {m_data['setup']['match_type']}")
-                    if st.button("Open Match Scorecard", key=f"open_{m_id}"):
+                    if st.button("Open as Manager", key=f"open_{m_id}"):
                         st.query_params["match_id"] = m_id
+                        st.query_params["manage"] = "true"
                         st.rerun()
                         
     with tab_create:
         st.header("New Match Setup")
-        match_name = st.text_input("Match Name", value="SLIM Golf Trip Match")
+        match_name = st.text_input("Match Name", value="")
         match_date = st.date_input("Date", value=datetime.date.today())
         
         c1, c2 = st.columns(2)
@@ -262,33 +276,55 @@ else:
         players = {}
         col1, col2 = st.columns(2)
         
-        # Default placeholder names mapped for convenience
         if match_type == "Singles":
-            with col1: players[st.text_input("P1 Name", value="Eddie")] = {"hi": st.number_input("P1 HI", value=5.3, format="%.1f", step=0.1)}
-            with col2: players[st.text_input("P2 Name", value="Ben")] = {"hi": st.number_input("P2 HI", value=12.0, format="%.1f", step=0.1)}
+            with col1: 
+                p1 = st.text_input("Player 1 Name", value="", key="s_p1_n")
+                if use_handicaps: players[p1] = {"hi": st.number_input("Player 1 HI", value=10.0, format="%.1f", step=0.1, key="s_p1_h")}
+                else: players[p1] = {"hi": 0.0}
+            with col2: 
+                p2 = st.text_input("Player 2 Name", value="", key="s_p2_n")
+                if use_handicaps: players[p2] = {"hi": st.number_input("Player 2 HI", value=10.0, format="%.1f", step=0.1, key="s_p2_h")}
+                else: players[p2] = {"hi": 0.0}
+                
         elif match_type in ["Fourball", "Foursomes"]:
             with col1:
                 st.write("**Team A**")
-                players[st.text_input("A1 Name", value="Eddie", key="a1n")] = {"hi": st.number_input("A1 HI", value=5.3, format="%.1f", step=0.1, key="a1h")}
-                players[st.text_input("A2 Name", value="Player 2", key="a2n")] = {"hi": st.number_input("A2 HI", value=10.0, format="%.1f", step=0.1, key="a2h")}
+                a1 = st.text_input("P1 Name", value="", key="t_a1_n")
+                if use_handicaps: players[a1] = {"hi": st.number_input("P1 HI", value=10.0, format="%.1f", step=0.1, key="t_a1_h")}
+                else: players[a1] = {"hi": 0.0}
+                
+                a2 = st.text_input("P2 Name", value="", key="t_a2_n")
+                if use_handicaps: players[a2] = {"hi": st.number_input("P2 HI", value=10.0, format="%.1f", step=0.1, key="t_a2_h")}
+                else: players[a2] = {"hi": 0.0}
             with col2:
                 st.write("**Team B**")
-                players[st.text_input("B1 Name", value="Ben", key="b1n")] = {"hi": st.number_input("B1 HI", value=12.0, format="%.1f", step=0.1, key="b1h")}
-                players[st.text_input("B2 Name", value="Player 4", key="b2n")] = {"hi": st.number_input("B2 HI", value=15.0, format="%.1f", step=0.1, key="b2h")}
+                b1 = st.text_input("P3 Name", value="", key="t_b1_n")
+                if use_handicaps: players[b1] = {"hi": st.number_input("P3 HI", value=10.0, format="%.1f", step=0.1, key="t_b1_h")}
+                else: players[b1] = {"hi": 0.0}
+                
+                b2 = st.text_input("P4 Name", value="", key="t_b2_n")
+                if use_handicaps: players[b2] = {"hi": st.number_input("P4 HI", value=10.0, format="%.1f", step=0.1, key="t_b2_h")}
+                else: players[b2] = {"hi": 0.0}
 
         if st.button("Generate Match & Link", type="primary", use_container_width=True):
-            new_id = uuid.uuid4().hex[:8]
-            st.session_state["db_matches"][new_id] = {
-                "id": new_id,
-                "setup": {
-                    "match_name": match_name, "date": match_date, "course": selected_course,
-                    "tee": selected_tee, "match_type": match_type, "use_handicaps": use_handicaps,
-                    "players": players
-                },
-                "scores": {}, "extra_holes": 0
-            }
-            st.query_params["match_id"] = new_id
-            st.rerun()
+            # Form validation
+            if not match_name or any(not p.strip() for p in players.keys()):
+                st.error("Please fill in the Match Name and all Player Names.")
+            else:
+                new_id = uuid.uuid4().hex[:8]
+                st.session_state["db_matches"][new_id] = {
+                    "id": new_id,
+                    "setup": {
+                        "match_name": match_name, "date": match_date, "course": selected_course,
+                        "tee": selected_tee, "match_type": match_type, "use_handicaps": use_handicaps,
+                        "players": players
+                    },
+                    "scores": {}, "current_hole": 0, "extra_holes": 0
+                }
+                # PUSH TO SUPABASE HERE in the future
+                st.query_params["match_id"] = new_id
+                st.query_params["manage"] = "true"
+                st.rerun()
 
     with tab_admin:
         st.header("Global Allowances")
@@ -296,34 +332,3 @@ else:
         with c1: st.session_state["allowances"]["Singles"] = int(st.number_input("Singles (%)", value=st.session_state["allowances"]["Singles"], step=1))
         with c2: st.session_state["allowances"]["Fourball"] = int(st.number_input("Fourball (%)", value=st.session_state["allowances"]["Fourball"], step=1))
         with c3: st.session_state["allowances"]["Foursomes"] = int(st.number_input("Foursomes (%)", value=st.session_state["allowances"]["Foursomes"], step=1))
-        
-        st.divider()
-        st.header("Add New Course")
-        with st.expander("➕ Add Course Data", expanded=False):
-            new_course_name = st.text_input("Course Name")
-            new_tee_name = st.text_input("Tee Name (e.g. White, Blue)")
-            colA, colB, colC = st.columns(3)
-            with colA: new_par = st.number_input("Course Par", value=72, step=1)
-            with colB: new_rating = st.number_input("Course Rating (CR)", value=72.0, step=0.1, format="%.1f")
-            with colC: new_slope = st.number_input("Slope", value=125, step=1)
-            
-            st.write("Enter Hole Data (Par & Index):")
-            # Create a default dataframe for 18 holes
-            df_holes = pd.DataFrame({"Hole": range(1, 19), "Par": [4]*18, "Index": range(1, 19)})
-            edited_df = st.data_editor(df_holes, hide_index=True, use_container_width=True)
-            
-            if st.button("Save Course", type="primary"):
-                if new_course_name and new_tee_name:
-                    if new_course_name not in st.session_state["courses"]:
-                        st.session_state["courses"][new_course_name] = {"tees": {}, "holes": []}
-                    
-                    st.session_state["courses"][new_course_name]["tees"][new_tee_name] = {
-                        "rating": new_rating, "slope": new_slope, "par": new_par
-                    }
-                    
-                    # Convert dataframe back to dictionary list
-                    holes_list = [{"hole": int(row["Hole"]), "par": int(row["Par"]), "index": int(row["Index"])} for _, row in edited_df.iterrows()]
-                    st.session_state["courses"][new_course_name]["holes"] = holes_list
-                    st.success(f"{new_course_name} saved successfully!")
-                else:
-                    st.error("Please provide both Course Name and Tee Name.")
