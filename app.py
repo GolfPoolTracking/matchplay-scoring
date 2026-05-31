@@ -61,6 +61,7 @@ try:
     st.session_state["db_matches"] = {}
     for row in db_res.data:
         data = row.get("match_data", {})
+        # Ensure we are loading records built for this outcome-based format
         if "setup" in data and "outcomes" in data:
             st.session_state["db_matches"][row["id"]] = data
 except Exception as e:
@@ -90,6 +91,7 @@ def generate_shots_data(match):
     team_names = {"A": "", "B": ""}
     team_display = {"A": "", "B": ""}
     
+    # Safely extract explicit team arrays to prevent any mix-ups
     if "team_a" in setup and "team_b" in setup:
         p_A = setup["team_a"]
         p_B = setup["team_b"]
@@ -257,10 +259,6 @@ def render_live_card(match_data, team_display, total_holes):
 
     html_string = f"""
     <div style="background: white; border: 1px solid #eaeaea; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 20px; margin-top: 10px; font-family: sans-serif;">
-        <div style="text-align: center; color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 1px;">
-            {setup['match_name']} - {setup['match_type']}
-        </div>
-        
         <div style="display: flex; align-items: stretch; justify-content: space-between; min-height: 65px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px;">
             <div style="flex: 1; background: {bg_a}; color: {text_a}; display: flex; align-items: center; justify-content: flex-start; padding: 10px 15px; border-radius: 6px 0 0 6px; clip-path: {shape_a}; border: {border_a};">
                 <div style="font-weight: bold; font-size: 13px; line-height: 1.4;">{name_a_html}</div>
@@ -335,11 +333,16 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             if st.button("🔄 Refresh Scoreboard", use_container_width=True):
                 st.rerun()
                 
-        st.html("<h4 style='text-align: center; color: #666; margin-top: 10px; font-family: sans-serif;'>Live Matchplay Scoreboard</h4>")
+        st.markdown(f"<h3 style='text-align: center; color: #333; margin-top: 10px;'>{setup['match_name']}</h3>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align: center; color: #666; margin-bottom: 20px;'>{setup['course']} • {setup['match_type']}</p>", unsafe_allow_html=True)
         render_live_card(match_data, team_display, total_holes)
 
     else:
         st.button("⬅ Back to Menu", on_click=lambda: st.query_params.clear())
+        
+        # New Explicit Header for Manager
+        st.markdown(f"<h3 style='text-align: center; color: #1f2937; margin-top: 5px; margin-bottom: 0px;'>⚙️ {setup['match_name']}</h3>", unsafe_allow_html=True)
+        st.caption(f"<div style='text-align: center; margin-bottom: 20px;'>{setup['course']} | {setup['match_type']}</div>", unsafe_allow_html=True)
         
         tab_options = ["Scoreboard", "Score Entry", "Shots Allocation", "Edit Match", "Share Links"]
         
@@ -413,48 +416,40 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             
             current_val = match_data["outcomes"].get(str_h, "H")
 
-            with st.container(border=True):
+            # Wrapping in a form fixes the rapid-click bug for radio buttons!
+            with st.form(key=f"outcome_form_hole_{curr_hole}", border=True):
                 st.markdown(f"<div style='text-align:center; color:gray; font-size:14px; margin-bottom:15px;'>Par {h_data['par']} &nbsp;|&nbsp; Index {h_data['index']}</div>", unsafe_allow_html=True)
                 
-                status_map = {
-                    "Not Played": "⚪ Not Played / Clear",
-                    "A": f"🟢 {team_display['A']} Won",
-                    "H": "🔘 Halved",
-                    "B": f"🟣 {team_display['B']} Won"
-                }
-                
-                # Show current explicitly so user always knows the state
-                bg_color = {"Not Played": "#f3f4f6", "A": "#d1fae5", "H": "#f3f4f6", "B": "#e0e7ff"}.get(current_val, "#f3f4f6")
-                st.markdown(f"<div style='text-align:center; font-size:15px; font-weight:bold; margin-bottom:20px; padding:10px; background-color:{bg_color}; border-radius:8px;'>Current Result: {status_map[current_val]}</div>", unsafe_allow_html=True)
-                
-                def update_and_advance(val):
-                    if val == "Not Played":
-                        match_data["outcomes"].pop(str_h, None)
-                    else:
-                        match_data["outcomes"][str_h] = val
-                    save_match_to_db(active_match_id, match_data)
-                    l, a, hp, mo, fs = get_match_status(match_data["outcomes"], total_holes)
-                    if val != "Not Played" and not mo and curr_hole < total_holes:
-                        st.session_state[state_key] = curr_hole + 1
-
-                # 1-Tap Entry System
-                btn_A, btn_H, btn_B = st.columns(3)
-                with btn_A:
-                    if st.button("🟢 Team A", use_container_width=True):
-                        update_and_advance("A")
-                        st.rerun()
-                with btn_H:
-                    if st.button("🔘 Halved", use_container_width=True):
-                        update_and_advance("H")
-                        st.rerun()
-                with btn_B:
-                    if st.button("🟣 Team B", use_container_width=True):
-                        update_and_advance("B")
-                        st.rerun()
+                outcome = st.radio(
+                    "Result",
+                    options=["Not Played", "A", "H", "B"],
+                    format_func=lambda x: {
+                        "Not Played": "⚪ Not Played / Clear",
+                        "A": f"🟢 {team_display['A']} Won",
+                        "H": "🔘 Halved",
+                        "B": f"🟣 {team_display['B']} Won"
+                    }[x],
+                    index=["Not Played", "A", "H", "B"].index(current_val),
+                    horizontal=False,
+                    label_visibility="collapsed"
+                )
                 
                 st.write("")
-                if st.button("⚪ Clear Result", use_container_width=True):
-                    update_and_advance("Not Played")
+                submit_label = "✅ Save & Next" if not match_over else "✅ Save Update"
+                
+                if st.form_submit_button(submit_label, type="primary", use_container_width=True):
+                    if outcome == "Not Played":
+                        match_data["outcomes"].pop(str_h, None)
+                    else:
+                        match_data["outcomes"][str_h] = outcome
+                    
+                    save_match_to_db(active_match_id, match_data)
+                    
+                    l, a, hp, mo, fs = get_match_status(match_data["outcomes"], total_holes)
+                    
+                    if outcome != "Not Played" and not mo and curr_hole < total_holes:
+                        st.session_state[state_key] += 1
+                        
                     st.rerun()
 
             if not match_over and st.button("➕ Add Extra Hole", use_container_width=True):
