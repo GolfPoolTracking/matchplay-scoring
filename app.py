@@ -151,7 +151,7 @@ def get_match_status(outcomes, total_holes):
             
             holes_remaining = total_holes - i
             
-            # Mathematical early finish logic (e.g., 3 UP with 2 to play -> 3&2)
+            # Mathematical early finish logic
             if abs(score) > holes_remaining:
                 match_over = True
                 if holes_remaining > 0:
@@ -176,8 +176,8 @@ def render_live_card(match_data, team_names, total_holes):
     leader, amount, holes_played, match_over, final_str = get_match_status(outcomes, total_holes)
     
     # Modern Golf Palette: Emerald Green & Indigo
-    COLOR_A = "#10b981" # Emerald Green
-    COLOR_B = "#6366f1" # Indigo
+    COLOR_A = "#10b981" 
+    COLOR_B = "#6366f1" 
     
     # Clean transparent defaults for ALL SQ state
     bg_a, text_a = "transparent", "#333"
@@ -187,16 +187,22 @@ def render_live_card(match_data, team_names, total_holes):
     border_a = "none"
     border_b = "none"
     
+    # Render tiny colored dots next to names when their background is transparent
+    name_a_display = f"<span style='display:inline-block; width:10px; height:10px; border-radius:50%; background-color:{COLOR_A}; margin-right:8px;'></span>{team_names['A']}"
+    name_b_display = f"{team_names['B']}<span style='display:inline-block; width:10px; height:10px; border-radius:50%; background-color:{COLOR_B}; margin-left:8px;'></span>"
+    
     if leader == "A":
         bg_a, text_a = COLOR_A, "white"
         shape_a = "polygon(0% 0%, 92% 0%, 100% 50%, 92% 100%, 0% 100%)"
         border_a = f"1px solid {COLOR_A}"
         status_text = f"<span style='color: {COLOR_A};'>{final_str}</span>"
+        name_a_display = team_names['A'] # Remove dot since background is green
     elif leader == "B":
         bg_b, text_b = COLOR_B, "white"
         shape_b = "polygon(8% 0%, 100% 0%, 100% 100%, 8% 100%, 0% 50%)"
         border_b = f"1px solid {COLOR_B}"
         status_text = f"<span style='color: {COLOR_B};'>{final_str}</span>"
+        name_b_display = team_names['B'] # Remove dot since background is indigo
     else:
         status_text = "<span style='color: #555;'>ALL SQ</span>"
 
@@ -214,7 +220,7 @@ def render_live_card(match_data, team_names, total_holes):
     subtext = "FINAL" if match_over else f"Thru {holes_played}"
 
     # Flattened string for safe Streamlit rendering
-    html_string = f"""<div style="background: white; border: 1px solid #eaeaea; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 20px; margin-top: 10px; font-family: sans-serif;"><div style="text-align: center; color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 1px;">{setup['match_name']} - {setup['match_type']}</div><div style="display: flex; align-items: center; justify-content: space-between; height: 65px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px;"><div style="flex: 1; height: 100%; background: {bg_a}; color: {text_a}; display: flex; align-items: center; padding-left: 15px; font-weight: bold; font-size: 15px; border-radius: 6px 0 0 6px; clip-path: {shape_a}; border: {border_a};">{team_names['A']}</div><div style="width: 100px; text-align: center; display: flex; flex-direction: column; justify-content: center;"><span style="font-size: 11px; color: #999; text-transform: uppercase; margin-bottom: 2px; font-weight: bold;">{subtext}</span><span style="font-size: 18px; font-weight: 800;">{status_text}</span></div><div style="flex: 1; height: 100%; background: {bg_b}; color: {text_b}; display: flex; align-items: center; justify-content: flex-end; padding-right: 15px; font-weight: bold; font-size: 15px; border-radius: 0 6px 6px 0; clip-path: {shape_b}; border: {border_b};">{team_names['B']}</div></div><div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">{circles_html}</div></div>"""
+    html_string = f"""<div style="background: white; border: 1px solid #eaeaea; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 20px; margin-top: 10px; font-family: sans-serif;"><div style="text-align: center; color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 1px;">{setup['match_name']} - {setup['match_type']}</div><div style="display: flex; align-items: center; justify-content: space-between; height: 65px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px;"><div style="flex: 1; height: 100%; background: {bg_a}; color: {text_a}; display: flex; align-items: center; padding-left: 15px; font-weight: bold; font-size: 15px; border-radius: 6px 0 0 6px; clip-path: {shape_a}; border: {border_a};">{name_a_display}</div><div style="width: 100px; text-align: center; display: flex; flex-direction: column; justify-content: center;"><span style="font-size: 11px; color: #999; text-transform: uppercase; margin-bottom: 2px; font-weight: bold;">{subtext}</span><span style="font-size: 18px; font-weight: 800;">{status_text}</span></div><div style="flex: 1; height: 100%; background: {bg_b}; color: {text_b}; display: flex; align-items: center; justify-content: flex-end; padding-right: 15px; font-weight: bold; font-size: 15px; border-radius: 0 6px 6px 0; clip-path: {shape_b}; border: {border_b};">{name_b_display}</div></div><div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">{circles_html}</div></div>"""
     
     st.html(html_string)
 
@@ -259,7 +265,6 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             leader, amount, holes_played, match_over, final_str = get_match_status(match_data.get("outcomes", {}), total_holes)
             state_key = f"entry_hole_{active_match_id}"
 
-            # Auto-calculate the next logical hole to score
             if state_key not in st.session_state:
                 if match_over:
                     st.session_state[state_key] = holes_played
@@ -268,14 +273,12 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
 
             curr_hole = st.session_state[state_key]
 
-            # Top Banner
             if match_over:
                 winner = team_names[leader] if leader in team_names else "Match"
                 st.success(f"🎉 **Match Finished!** {winner} wins {final_str}")
             else:
                 st.write("Record the outcome below. The system will automatically detect when the match is over.")
 
-            # Custom Navigation
             st.divider()
             c1, c2, c3 = st.columns([1, 2, 1])
             with c1:
@@ -285,13 +288,11 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             with c2:
                 st.markdown(f"<h4 style='text-align:center; margin-top:5px;'>Hole {curr_hole}</h4>", unsafe_allow_html=True)
             with c3:
-                # Disable next if match is over AND they are viewing the final hole, or if they hit the max limit
                 disable_next = (curr_hole >= total_holes) or (match_over and curr_hole >= holes_played)
                 if st.button("Next ➡", disabled=disable_next, use_container_width=True):
                     st.session_state[state_key] += 1
                     st.rerun()
 
-            # Single Hole Entry UI
             h_idx = curr_hole - 1
             real_hole_idx = h_idx % 18
             h_data = course_holes[real_hole_idx]
@@ -326,10 +327,8 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                     
                     save_match_to_db(active_match_id, match_data)
                     
-                    # Recalculate status to check if saving this triggered a finish
                     l, a, hp, mo, fs = get_match_status(match_data["outcomes"], total_holes)
                     
-                    # Auto-advance if match isn't over and we aren't at the end
                     if outcome != "Not Played" and not mo and curr_hole < total_holes:
                         st.session_state[state_key] += 1
                         
@@ -344,13 +343,11 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             st.header("Handicap Allocation")
             st.write(f"**Format:** {setup['match_type']} ({st.session_state['allowances'][setup['match_type']]}% Allowance)")
             
-            # Generate table showing exact shots per hole
             grid_data = []
             for idx in range(18):
                 h_data = course_holes[idx]
                 row = {"Hole": idx + 1, "Par": h_data['par'], "Index": h_data['index']}
                 
-                # Show asterisks for players getting shots
                 for p_name, total_shots in shots_received.items():
                     strokes_on_this_hole = allocate_strokes(total_shots, h_data['index'])
                     row[p_name] = "*" * strokes_on_this_hole if strokes_on_this_hole > 0 else "-"
@@ -359,7 +356,6 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                 
             st.dataframe(pd.DataFrame(grid_data).set_index("Hole"), use_container_width=True)
             
-            # Show summary of CH and HI
             st.write("**Player Data Used:**")
             raw_data = []
             for p, data in setup["players"].items():
