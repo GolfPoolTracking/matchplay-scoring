@@ -61,7 +61,6 @@ try:
     st.session_state["db_matches"] = {}
     for row in db_res.data:
         data = row.get("match_data", {})
-        # Ensure we are loading records built for this outcome-based format
         if "setup" in data and "outcomes" in data:
             st.session_state["db_matches"][row["id"]] = data
 except Exception as e:
@@ -250,7 +249,6 @@ def render_live_card(match_data, team_display, total_holes):
         elif res == "H":
             circles_html += f"<div style='width: 24px; height: 24px; border-radius: 50%; background: {COLOR_H}; color: white; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold;'>{i}</div>"
 
-    # Set subtext dynamically
     if match_over:
         subtext = "FINAL"
     elif holes_played == 0:
@@ -436,7 +434,8 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             
             current_val = match_data["outcomes"].get(str_h, "H")
 
-            with st.container(border=True):
+            # FORMS FIX: Wrapping inside an st.form prevents rapid radio button clicks from being ignored
+            with st.form(key=f"outcome_form_hole_{curr_hole}", border=True):
                 st.markdown(f"<div style='text-align:center; color:gray; font-size:14px; margin-bottom:15px;'>Par {h_data['par']} &nbsp;|&nbsp; Index {h_data['index']}</div>", unsafe_allow_html=True)
                 
                 outcome = st.radio(
@@ -450,14 +449,13 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                     }[x],
                     index=["Not Played", "A", "H", "B"].index(current_val),
                     horizontal=False,
-                    label_visibility="collapsed",
-                    key=f"outcome_radio_{curr_hole}" 
+                    label_visibility="collapsed"
                 )
                 
                 st.write("")
                 submit_label = "✅ Save & Next" if not match_over else "✅ Save Update"
                 
-                if st.button(submit_label, type="primary", use_container_width=True):
+                if st.form_submit_button(submit_label, type="primary", use_container_width=True):
                     if outcome == "Not Played":
                         match_data["outcomes"].pop(str_h, None)
                     else:
@@ -587,6 +585,21 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                         save_match_to_db(active_match_id, match_data)
                         st.success("Match updated successfully!")
                         st.rerun()
+
+            # DANGER ZONE (Match Deletion)
+            st.write("<br><br>", unsafe_allow_html=True)
+            st.divider()
+            st.subheader("Danger Zone")
+            st.error("Deleting a match is permanent and cannot be undone.")
+            confirm_del = st.checkbox("I confirm I want to permanently delete this match.")
+            if st.button("🗑️ Delete Match", disabled=not confirm_del, use_container_width=True):
+                try:
+                    supabase.table("matchplay_sessions").delete().eq("id", active_match_id).execute()
+                    del st.session_state["db_matches"][active_match_id]
+                except Exception as e:
+                    pass
+                st.query_params.clear()
+                st.rerun()
 
         elif active_tab == "Share Links":
             st.write("**Public Leaderboard Link (Send to players):**")
