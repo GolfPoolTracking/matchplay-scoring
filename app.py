@@ -61,6 +61,7 @@ try:
     st.session_state["db_matches"] = {}
     for row in db_res.data:
         data = row.get("match_data", {})
+        # Ensure we are loading records built for this outcome-based format
         if "setup" in data and "outcomes" in data:
             st.session_state["db_matches"][row["id"]] = data
 except Exception as e:
@@ -259,20 +260,17 @@ def render_live_card(match_data, team_display, total_holes):
         
         <div style="display: flex; align-items: stretch; justify-content: space-between; min-height: 65px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px;">
             
-            <!-- Team A Side -->
             <div style="flex: 1; background: {bg_a}; color: {text_a}; display: flex; align-items: center; justify-content: flex-start; padding: 10px 15px; border-radius: 6px 0 0 6px; clip-path: {shape_a}; border: {border_a};">
                 <div style="font-weight: bold; font-size: 13px; line-height: 1.4;">
                     {name_a_html}
                 </div>
             </div>
             
-            <!-- Center Status -->
             <div style="width: 90px; text-align: center; display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; padding: 0 5px;">
                 <span style="font-size: 11px; color: #999; text-transform: uppercase; margin-bottom: 2px; font-weight: bold;">{subtext}</span>
                 <span style="font-size: 18px; font-weight: 800;">{status_text}</span>
             </div>
             
-            <!-- Team B Side -->
             <div style="flex: 1; background: {bg_b}; color: {text_b}; display: flex; align-items: center; justify-content: flex-end; padding: 10px 15px; border-radius: 0 6px 6px 0; clip-path: {shape_b}; border: {border_b}; text-align: right;">
                 <div style="font-weight: bold; font-size: 13px; line-height: 1.4;">
                     {name_b_html}
@@ -281,7 +279,6 @@ def render_live_card(match_data, team_display, total_holes):
             
         </div>
         
-        <!-- History Bubbles -->
         <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
             {circles_html}
         </div>
@@ -431,11 +428,13 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             h_data = course_holes[real_hole_idx]
             str_h = str(curr_hole)
             
+            # Default to Halved if the hole has not been recorded yet
             current_val = match_data["outcomes"].get(str_h, "H")
 
             with st.container(border=True):
                 st.markdown(f"<div style='text-align:center; color:gray; font-size:14px; margin-bottom:15px;'>Par {h_data['par']} &nbsp;|&nbsp; Index {h_data['index']}</div>", unsafe_allow_html=True)
                 
+                # Dynamic key added to prevent Streamlit from holding onto old radio button selections!
                 outcome = st.radio(
                     "Result",
                     options=["Not Played", "A", "H", "B"],
@@ -447,7 +446,8 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                     }[x],
                     index=["Not Played", "A", "H", "B"].index(current_val),
                     horizontal=False,
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
+                    key=f"outcome_radio_{curr_hole}" 
                 )
                 
                 st.write("")
@@ -493,7 +493,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             st.write("**Player Data Used:**")
             raw_data = []
             for p, data in setup["players"].items():
-                raw_data.append({"Player": p, "HI": data["hi"]})
+                raw_data.append({"Player": p, "HI": f"{float(data['hi']):.1f}"})
             st.dataframe(pd.DataFrame(raw_data), hide_index=True)
 
         elif active_tab == "Edit Match":
@@ -527,10 +527,10 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                     col1, col2 = st.columns(2)
                     with col1: 
                         e_a1 = st.text_input("Player 1 Name", value=p_A[0])
-                        e_hi_a1 = st.number_input("Player 1 HI", value=float(setup["players"][p_A[0]]["hi"]), step=0.1)
+                        e_hi_a1 = st.number_input("Player 1 HI", value=float(setup["players"][p_A[0]]["hi"]), format="%.1f", step=0.1)
                     with col2: 
                         e_b1 = st.text_input("Player 2 Name", value=p_B[0])
-                        e_hi_b1 = st.number_input("Player 2 HI", value=float(setup["players"][p_B[0]]["hi"]), step=0.1)
+                        e_hi_b1 = st.number_input("Player 2 HI", value=float(setup["players"][p_B[0]]["hi"]), format="%.1f", step=0.1)
                         
                     if st.form_submit_button("💾 Save Changes", type="primary", use_container_width=True):
                         new_players = {e_a1: {"hi": e_hi_a1}, e_b1: {"hi": e_hi_b1}}
@@ -553,19 +553,19 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                     colA1, colA2 = st.columns(2)
                     with colA1:
                         e_a1 = st.text_input("P1 Name", value=p_A[0])
-                        e_hi_a1 = st.number_input("P1 HI", value=float(setup["players"][p_A[0]]["hi"]), step=0.1)
+                        e_hi_a1 = st.number_input("P1 HI", value=float(setup["players"][p_A[0]]["hi"]), format="%.1f", step=0.1)
                     with colA2:
                         e_a2 = st.text_input("P2 Name", value=p_A[1])
-                        e_hi_a2 = st.number_input("P2 HI", value=float(setup["players"][p_A[1]]["hi"]), step=0.1)
+                        e_hi_a2 = st.number_input("P2 HI", value=float(setup["players"][p_A[1]]["hi"]), format="%.1f", step=0.1)
                         
                     st.write("**Team B**")
                     colB1, colB2 = st.columns(2)
                     with colB1:
                         e_b1 = st.text_input("P3 Name", value=p_B[0])
-                        e_hi_b1 = st.number_input("P3 HI", value=float(setup["players"][p_B[0]]["hi"]), step=0.1)
+                        e_hi_b1 = st.number_input("P3 HI", value=float(setup["players"][p_B[0]]["hi"]), format="%.1f", step=0.1)
                     with colB2:
                         e_b2 = st.text_input("P4 Name", value=p_B[1])
-                        e_hi_b2 = st.number_input("P4 HI", value=float(setup["players"][p_B[1]]["hi"]), step=0.1)
+                        e_hi_b2 = st.number_input("P4 HI", value=float(setup["players"][p_B[1]]["hi"]), format="%.1f", step=0.1)
                         
                     if st.form_submit_button("💾 Save Changes", type="primary", use_container_width=True):
                         new_players = {
