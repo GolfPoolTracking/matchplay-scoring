@@ -189,38 +189,36 @@ def render_live_card(match_data, team_names):
         elif res == "H":
             circles_html += f"<div style='width: 24px; height: 24px; border-radius: 50%; border: 1px solid #ccc; color: #888; background: #f9f9f9; display: flex; align-items: center; justify-content: center; font-size: 11px;'>{i}</div>"
 
-    st.markdown(f"""
-    <div style="background: white; border: 1px solid #eaeaea; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 20px; margin-top: 10px; font-family: sans-serif;">
-        <div style="text-align: center; color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 1px;">
-            {setup['match_name']} - {setup['match_type']}
-        </div>
-        
-        <div style="display: flex; align-items: center; justify-content: space-between; height: 65px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px;">
-            
-            <!-- Team A Side -->
-            <div style="flex: 1; height: 100%; background: {bg_a}; color: {text_a}; display: flex; align-items: center; padding-left: 15px; font-weight: bold; font-size: 15px; border-radius: 6px 0 0 6px; clip-path: {shape_a}; border: {border_a};">
-                {team_names['A']}
-            </div>
-            
-            <!-- Center Status -->
-            <div style="width: 100px; text-align: center; display: flex; flex-direction: column; justify-content: center;">
-                <span style="font-size: 11px; color: #999; text-transform: uppercase; margin-bottom: 2px;">Thru {holes_played}</span>
-                <span style="font-size: 18px; font-weight: 800;">{status_text}</span>
-            </div>
-            
-            <!-- Team B Side -->
-            <div style="flex: 1; height: 100%; background: {bg_b}; color: {text_b}; display: flex; align-items: center; justify-content: flex-end; padding-right: 15px; font-weight: bold; font-size: 15px; border-radius: 0 6px 6px 0; clip-path: {shape_b}; border: {border_b};">
-                {team_names['B']}
-            </div>
-            
-        </div>
-        
-        <!-- History Bubbles -->
-        <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
-            {circles_html}
-        </div>
+    # FLUSH LEFT TO PREVENT STREAMLIT FROM RENDERING AS A CODE BLOCK
+    html_string = f"""
+<div style="background: white; border: 1px solid #eaeaea; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 20px; margin-top: 10px; font-family: sans-serif;">
+    <div style="text-align: center; color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 1px;">
+        {setup['match_name']} - {setup['match_type']}
     </div>
-    """, unsafe_allow_html=True)
+    
+    <div style="display: flex; align-items: center; justify-content: space-between; height: 65px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px;">
+        
+        <div style="flex: 1; height: 100%; background: {bg_a}; color: {text_a}; display: flex; align-items: center; padding-left: 15px; font-weight: bold; font-size: 15px; border-radius: 6px 0 0 6px; clip-path: {shape_a}; border: {border_a};">
+            {team_names['A']}
+        </div>
+        
+        <div style="width: 100px; text-align: center; display: flex; flex-direction: column; justify-content: center;">
+            <span style="font-size: 11px; color: #999; text-transform: uppercase; margin-bottom: 2px;">Thru {holes_played}</span>
+            <span style="font-size: 18px; font-weight: 800;">{status_text}</span>
+        </div>
+        
+        <div style="flex: 1; height: 100%; background: {bg_b}; color: {text_b}; display: flex; align-items: center; justify-content: flex-end; padding-right: 15px; font-weight: bold; font-size: 15px; border-radius: 0 6px 6px 0; clip-path: {shape_b}; border: {border_b};">
+            {team_names['B']}
+        </div>
+        
+    </div>
+    
+    <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
+        {circles_html}
+    </div>
+</div>
+"""
+    st.markdown(html_string, unsafe_allow_html=True)
 
 
 # --- Routing Logic ---
