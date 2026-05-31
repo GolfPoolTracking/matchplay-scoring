@@ -137,7 +137,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
         current_match_score = 0
         holes_played = match.get("current_hole", 0)
 
-        # Calculate Overall Status
+        # 1. CALCULATE OVERALL STATUS (Background Math)
         for idx in range(total_holes):
             str_idx = str(idx)
             if str_idx in match["scores"] and idx < holes_played:
@@ -163,102 +163,133 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                         if net_scores[p1] < net_scores[p2]: current_match_score += 1
                         elif net_scores[p2] < net_scores[p1]: current_match_score -= 1
 
-        # Display Top Status Bar
+        # 2. PERSISTENT MATCH HEADER
         st.markdown("---")
         if current_match_score > 0:
             leader = "Team A" if setup["match_type"] != "Singles" else player_entities[0]
-            st.markdown(f"<h2 style='text-align: center; color: #2e7d32;'>🏆 {leader} {abs(current_match_score)} Up </h2>", unsafe_allow_html=True)
+            st.markdown(f"<h2 style='text-align: center; color: #2e7d32; margin:0;'>🏆 {leader} {abs(current_match_score)} Up </h2>", unsafe_allow_html=True)
         elif current_match_score < 0:
             leader = "Team B" if setup["match_type"] != "Singles" else player_entities[1]
-            st.markdown(f"<h2 style='text-align: center; color: #1565c0;'>🏆 {leader} {abs(current_match_score)} Up </h2>", unsafe_allow_html=True)
+            st.markdown(f"<h2 style='text-align: center; color: #1565c0; margin:0;'>🏆 {leader} {abs(current_match_score)} Up </h2>", unsafe_allow_html=True)
         else:
-            st.markdown("<h2 style='text-align: center; color: #ff8f00;'>⚖️ All Square </h2>", unsafe_allow_html=True)
+            st.markdown("<h2 style='text-align: center; color: #ff8f00; margin:0;'>⚖️ All Square </h2>", unsafe_allow_html=True)
         st.caption(f"<div style='text-align: center;'>Thru {holes_played} holes</div>", unsafe_allow_html=True)
         st.markdown("---")
 
-        view_all = st.checkbox("View Full Scorecard", value=not is_manager)
-
-        # Score Entry UI
-        for idx in range(total_holes):
-            if not view_all and idx != holes_played:
-                continue
-                
-            real_hole_idx = idx % 18
-            hole_data = course_holes[real_hole_idx]
-            par = hole_data['par']
-            str_idx = str(idx) 
+        # 3. HOLE NAVIGATION LOGIC
+        if "view_hole_idx" not in st.session_state:
+            st.session_state.view_hole_idx = min(holes_played, total_holes - 1)
             
-            if str_idx not in match["scores"]:
-                match["scores"][str_idx] = {p: par for p in player_entities}
-            
-            is_active_hole = (idx == holes_played)
-            expander_title = f"⛳ Hole {idx + 1} | Par {par} | Index {hole_data['index']}"
-            if idx < holes_played: expander_title += " ✅"
+        view_idx = st.session_state.view_hole_idx
+        
+        nav1, nav2, nav3 = st.columns([1, 2, 1])
+        with nav1:
+            if st.button("⬅", disabled=(view_idx == 0), use_container_width=True):
+                st.session_state.view_hole_idx -= 1
+                st.rerun()
+        with nav2:
+            st.markdown(f"<h3 style='text-align:center; margin:0;'>⛳ Hole {view_idx + 1}</h3>", unsafe_allow_html=True)
+        with nav3:
+            if st.button("➡", disabled=(view_idx >= total_holes - 1), use_container_width=True):
+                st.session_state.view_hole_idx += 1
+                st.rerun()
 
-            with st.expander(expander_title, expanded=(is_active_hole or not view_all)):
+        # 4. SINGLE HOLE ENTRY UI
+        hole_data = course_holes[view_idx % 18]
+        par = hole_data['par']
+        str_idx = str(view_idx)
+        
+        st.caption(f"<div style='text-align:center;'>Par {par} &nbsp;|&nbsp; Index {hole_data['index']}</div>", unsafe_allow_html=True)
+
+        if str_idx not in match["scores"]:
+            match["scores"][str_idx] = {p: par for p in player_entities}
+
+        if is_manager:
+            with st.form(key=f"form_hole_{view_idx}", border=True):
+                selections = {}
+                score_options = ["NR"] + list(range(1, 13)) # Quick tap up to 12
                 
-                if is_manager and (is_active_hole or view_all):
-                    # --- COMPACT & FAST MANAGER VIEW (USING FORMS) ---
-                    with st.form(key=f"form_hole_{idx}"):
-                        cols = st.columns(len(player_entities))
-                        selections = {}
+                for p in player_entities:
+                    asterisks = allocate_strokes(shots_received[p], hole_data["index"])
+                    current_val = match["scores"][str_idx][p]
+                    if current_val not in score_options:
+                        current_val = par
+                    
+                    st.markdown(f"<div style='padding-top:10px;'><b>{p}</b> {asterisks}</div>", unsafe_allow_html=True)
+                    
+                    # Streamlit Pills for rapid tap entry
+                    selections[p] = st.pills(
+                        f"Score for {p}", 
+                        options=score_options, 
+                        default=current_val, 
+                        key=f"sel_{view_idx}_{p}",
+                        label_visibility="collapsed"
+                    )
+                
+                st.divider()
+                submit_label = "✅ Save & Next Hole" if view_idx < total_holes - 1 else "✅ Save Final Scores"
+                
+                if st.form_submit_button(submit_label, type="primary", use_container_width=True):
+                    for p in player_entities:
+                        # Fallback to the default if the user completely deselected a pill
+                        match["scores"][str_idx][p] = selections[p] if selections[p] is not None else current_val
+                    
+                    if view_idx == match.get("current_hole", 0):
+                        match["current_hole"] = view_idx + 1
                         
-                        for i, p in enumerate(player_entities):
-                            asterisks = allocate_strokes(shots_received[p], hole_data["index"])
-                            current_val = match["scores"][str_idx][p]
-                            
-                            options = ["NR"] + list(range(1, 16))
-                            idx_val = options.index(current_val) if current_val in options else options.index(par)
-                            
-                            with cols[i]:
-                                # Player Name and Stroke Allocation
-                                st.markdown(f"<div style='text-align:center;'><b>{p}</b><br>{asterisks}</div>", unsafe_allow_html=True)
-                                
-                                # Compact Native Dropdown
-                                selections[p] = st.selectbox(
-                                    "Score", 
-                                    options, 
-                                    index=idx_val, 
-                                    key=f"sel_{idx}_{p}", 
-                                    label_visibility="collapsed"
-                                )
-                                
-                        st.divider()
+                    if st.session_state.view_hole_idx < total_holes - 1:
+                        st.session_state.view_hole_idx += 1
                         
-                        # Single Database Submission
-                        submit_clicked = st.form_submit_button(f"✅ Confirm Hole {idx + 1} Scores", type="primary", use_container_width=True)
-                        
-                        if submit_clicked:
-                            for p in player_entities:
-                                match["scores"][str_idx][p] = selections[p]
-                            
-                            # Only advance the hole tracker if they are confirming the current active hole
-                            if is_active_hole:
-                                match["current_hole"] = idx + 1
-                                
-                            # One fast Supabase write!
-                            save_match_to_db(active_match_id, match)
-                            st.rerun()
+                    save_match_to_db(active_match_id, match)
+                    st.rerun()
+        else:
+            # Read-Only View
+            with st.container(border=True):
+                for p in player_entities:
+                    asterisks = allocate_strokes(shots_received[p], hole_data["index"])
+                    current_val = match["scores"][str_idx][p]
+                    
+                    col_name, col_score = st.columns([3, 1])
+                    with col_name:
+                        st.markdown(f"**{p}** {asterisks}")
+                    with col_score:
+                        st.markdown(f"<h3 style='margin:0; text-align:right;'>{current_val}</h3>", unsafe_allow_html=True)
+                    st.divider()
 
-                else:
-                    # --- READ ONLY VIEW ---
-                    cols = st.columns(len(player_entities))
-                    for i, p in enumerate(player_entities):
-                        with cols[i]:
-                            asterisks = allocate_strokes(shots_received[p], hole_data["index"])
-                            current_val = match["scores"][str_idx][p]
-                            
-                            st.markdown(f"<div style='text-align:center;'><b>{p}</b><br>{asterisks}</div>", unsafe_allow_html=True)
-                            st.markdown(f"<h3 style='text-align:center; margin-top: 10px;'>{current_val}</h3>", unsafe_allow_html=True)
-                            
-                            if current_val != "NR":
-                                net = current_val - len(asterisks)
-                                st.caption(f"<div style='text-align:center;'>Net: {net}</div>", unsafe_allow_html=True)
+        # 5. DATA TABLES & SUMMARIES
+        st.write("")
+        
+        # Front 9 / Back 9 / Total Summary
+        st.subheader("Gross Score Summary")
+        summary_data = []
+        for p in player_entities:
+            f9 = sum([match["scores"][str(i)].get(p, 0) for i in range(9) if str(i) in match["scores"] and match["scores"][str(i)].get(p) != "NR"])
+            b9 = sum([match["scores"][str(i)].get(p, 0) for i in range(9, 18) if str(i) in match["scores"] and match["scores"][str(i)].get(p) != "NR"])
+            summary_data.append({
+                "Player": p,
+                "Out (Front 9)": f9,
+                "In (Back 9)": b9,
+                "Total Gross": f9 + b9
+            })
+        st.dataframe(pd.DataFrame(summary_data), hide_index=True, use_container_width=True)
+
+        # Full Grid
+        if st.checkbox("📊 View Full Scorecard Grid"):
+            grid_data = []
+            for i in range(total_holes):
+                s_idx = str(i)
+                row = {"Hole": i + 1, "Par": course_holes[i % 18]['par']}
+                if s_idx in match["scores"]:
+                    for p in player_entities:
+                        row[p] = match["scores"][s_idx].get(p, "-")
+                grid_data.append(row)
+            st.dataframe(pd.DataFrame(grid_data).set_index("Hole"), use_container_width=True)
 
         if is_manager and st.button("➕ Add Extra Hole", use_container_width=True):
             match["extra_holes"] = match.get("extra_holes", 0) + 1
             save_match_to_db(active_match_id, match)
             st.rerun()
+
     with tab_breakdown:
         st.subheader("Match Parameters")
         st.write(f"**Handicaps Used:** {'Yes' if setup.get('use_handicaps', True) else 'No (Scratch)'}")
