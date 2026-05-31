@@ -205,7 +205,6 @@ def get_match_status(outcomes, total_holes):
 COLOR_A = "#10b981" 
 COLOR_B = "#6366f1" 
 COLOR_H = "#9ca3af"
-COLOR_NP = "#f3f4f6"
 
 def render_live_card(match_data, team_display, total_holes):
     setup = match_data["setup"]
@@ -213,8 +212,9 @@ def render_live_card(match_data, team_display, total_holes):
     
     leader, amount, holes_played, match_over, final_str = get_match_status(outcomes, total_holes)
     
-    bg_a, text_a = "transparent", "#333"
-    bg_b, text_b = "transparent", "#333"
+    # Adapts to Light/Dark Mode automatically
+    bg_a, text_a = "transparent", "var(--text-color)"
+    bg_b, text_b = "transparent", "var(--text-color)"
     shape_a = "none"
     shape_b = "none"
     border_a = "none"
@@ -236,7 +236,7 @@ def render_live_card(match_data, team_display, total_holes):
         status_text = f"<span style='color: {COLOR_B};'>{final_str}</span>"
         name_b_html = team_display['B'] 
     else:
-        status_text = "<span style='color: #555;'>ALL SQ</span>"
+        status_text = "<span style='opacity: 0.8;'>ALL SQ</span>"
 
     circles_html = ""
     for i in range(1, holes_played + 1):
@@ -256,13 +256,13 @@ def render_live_card(match_data, team_display, total_holes):
         subtext = f"THRU {holes_played}"
 
     html_string = f"""
-    <div style="background: white; border: 1px solid #eaeaea; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 20px; margin-top: 10px; font-family: sans-serif;">
-        <div style="display: flex; align-items: stretch; justify-content: space-between; min-height: 65px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px;">
+    <div style="background: var(--background-color); border: 1px solid var(--secondary-background-color); border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 20px; margin-bottom: 20px; font-family: sans-serif;">
+        <div style="display: flex; align-items: stretch; justify-content: space-between; min-height: 65px; border-bottom: 1px solid var(--secondary-background-color); padding-bottom: 15px; margin-bottom: 15px;">
             <div style="flex: 1; background: {bg_a}; color: {text_a}; display: flex; align-items: center; justify-content: flex-start; padding: 10px 15px; border-radius: 6px 0 0 6px; clip-path: {shape_a}; border: {border_a};">
                 <div style="font-weight: bold; font-size: 13px; line-height: 1.4;">{name_a_html}</div>
             </div>
             <div style="width: 90px; text-align: center; display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; padding: 0 5px;">
-                <span style="font-size: 11px; color: #999; text-transform: uppercase; margin-bottom: 2px; font-weight: bold;">{subtext}</span>
+                <span style="font-size: 11px; opacity: 0.6; text-transform: uppercase; margin-bottom: 2px; font-weight: bold;">{subtext}</span>
                 <span style="font-size: 18px; font-weight: 800;">{status_text}</span>
             </div>
             <div style="flex: 1; background: {bg_b}; color: {text_b}; display: flex; align-items: center; justify-content: flex-end; padding: 10px 15px; border-radius: 0 6px 6px 0; clip-path: {shape_b}; border: {border_b}; text-align: right;">
@@ -278,10 +278,10 @@ def render_live_card(match_data, team_display, total_holes):
 
 def render_compact_grid(outcomes, total_holes, active_match_id, current_hole, holes_format):
     def get_color(hole_val):
-        if hole_val == "A": return COLOR_A, "white"
-        if hole_val == "B": return COLOR_B, "white"
-        if hole_val == "H": return COLOR_H, "white"
-        return COLOR_NP, "#9ca3af"
+        if hole_val == "A": return COLOR_A, "white", "none"
+        if hole_val == "B": return COLOR_B, "white", "none"
+        if hole_val == "H": return COLOR_H, "white", "none"
+        return "transparent", "var(--text-color)", "1px solid var(--secondary-background-color)"
 
     html = """
     <style>
@@ -298,15 +298,18 @@ def render_compact_grid(outcomes, total_holes, active_match_id, current_hole, ho
         row_html = "<div style='display: flex; gap: 6px;'>"
         for i in range(start, actual_end + 1):
             val = outcomes.get(str(i), "Not Played")
-            bg, txt = get_color(val)
-            ring = "box-shadow: 0 0 0 3px #1f2937;" if i == current_hole else ""
+            bg, txt, border = get_color(val)
+            
+            # Subtle highlight ring for active hole
+            ring = "box-shadow: 0 0 0 2px var(--primary-color);" if i == current_hole else ""
+            opacity = "0.5" if val == "Not Played" and i != current_hole else "1"
+            
             row_html += f"<a href='?match_id={active_match_id}&manage=true&hole={i}&tab_jump=Score%20Entry' target='_self' style='text-decoration: none;'>"
-            row_html += f"<div class='hole-box' style='width: 32px; height: 32px; border-radius: 6px; background: {bg}; color: {txt}; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: bold; border: 1px solid #e5e7eb; {ring}'>{i}</div>"
+            row_html += f"<div class='hole-box' style='width: 32px; height: 32px; border-radius: 6px; background: {bg}; color: {txt}; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: bold; border: {border}; opacity: {opacity}; {ring}'>{i}</div>"
             row_html += "</a>"
         row_html += "</div>"
         return row_html
 
-    # Dynamic 2-row layouts based on match format
     if holes_format == 36:
         html += make_row(1, 18)
         html += make_row(19, 36)
@@ -320,6 +323,7 @@ def render_compact_grid(outcomes, total_holes, active_match_id, current_hole, ho
 
     html += "</div></div>"
     return html
+
 
 # --- Routing Logic ---
 query_params = st.query_params
@@ -341,15 +345,15 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             if st.button("🔄 Refresh Scoreboard", use_container_width=True):
                 st.rerun()
                 
-        st.markdown(f"<h3 style='text-align: center; color: #333; margin-top: 10px; margin-bottom: 0;'>{setup['match_name']}</h3>", unsafe_allow_html=True)
-        st.markdown(f"<p style='text-align: center; color: #666; margin-bottom: 20px;'>{setup['course']} • {setup['match_type']}</p>", unsafe_allow_html=True)
+        st.markdown(f"<h3 style='text-align: center; margin-top: 10px; margin-bottom: 0;'>{setup['match_name']}</h3>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align: center; opacity: 0.7; margin-bottom: 20px;'>{setup['course']} • {setup['match_type']}</p>", unsafe_allow_html=True)
         render_live_card(match_data, team_display, total_holes)
 
     else:
         st.button("⬅ Back to Menu", on_click=lambda: st.query_params.clear())
         
-        st.markdown(f"<h3 style='text-align: center; color: #1f2937; margin-top: 5px; margin-bottom: 0px;'>⚙️ {setup['match_name']}</h3>", unsafe_allow_html=True)
-        st.caption(f"<div style='text-align: center; margin-bottom: 20px;'>{setup['course']} | {setup['match_type']}</div>", unsafe_allow_html=True)
+        st.markdown(f"<h3 style='text-align: center; margin-top: 5px; margin-bottom: 0px;'>⚙️ {setup['match_name']}</h3>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align: center; opacity: 0.7; margin-bottom: 20px; font-size: 14px;'>{setup['course']} | {setup['match_type']}</p>", unsafe_allow_html=True)
         
         tab_options = ["Scoreboard", "Score Entry", "Shots Allocation", "Edit Match", "Share Links"]
         
@@ -424,7 +428,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             current_val = match_data["outcomes"].get(str_h, "Not Played")
 
             with st.container(border=True):
-                st.markdown(f"<div style='text-align:center; color:gray; font-size:14px; margin-bottom:15px;'>Par {h_data['par']} &nbsp;|&nbsp; Index {h_data['index']}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='text-align:center; opacity:0.6; font-size:14px; margin-bottom:15px;'>Par {h_data['par']} &nbsp;|&nbsp; Index {h_data['index']}</div>", unsafe_allow_html=True)
                 
                 status_map = {
                     "Not Played": "⚪ Not Played",
@@ -433,9 +437,11 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                     "B": f"🟣 {team_names['B']} Won"
                 }
                 
-                bg_color = {"Not Played": "#f3f4f6", "A": "#d1fae5", "H": "#f3f4f6", "B": "#e0e7ff"}.get(current_val, "#f3f4f6")
-                text_color = {"Not Played": "#6b7280", "A": "#065f46", "H": "#6b7280", "B": "#3730a3"}.get(current_val, "#6b7280")
-                st.markdown(f"<div style='text-align:center; font-size:16px; font-weight:bold; margin-bottom:15px; padding:12px; background-color:{bg_color}; color:{text_color}; border-radius:8px;'>Current: {status_map[current_val]}</div>", unsafe_allow_html=True)
+                bg_color = {"Not Played": "transparent", "A": f"{COLOR_A}22", "H": "var(--secondary-background-color)", "B": f"{COLOR_B}22"}.get(current_val, "transparent")
+                border_color = {"Not Played": "var(--secondary-background-color)", "A": COLOR_A, "H": "var(--secondary-background-color)", "B": COLOR_B}.get(current_val, "var(--secondary-background-color)")
+                text_color = {"Not Played": "var(--text-color)", "A": COLOR_A, "H": "var(--text-color)", "B": COLOR_B}.get(current_val, "var(--text-color)")
+                
+                st.markdown(f"<div style='text-align:center; font-size:16px; font-weight:bold; margin-bottom:20px; padding:12px; background-color:{bg_color}; border: 1px solid {border_color}; color:{text_color}; border-radius:8px;'>Current: {status_map[current_val]}</div>", unsafe_allow_html=True)
 
                 def update_and_advance(val):
                     if val == "Not Played":
@@ -449,7 +455,6 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                     if val != "Not Played" and not mo and curr_hole < total_holes:
                         st.session_state[state_key] = curr_hole + 1
 
-                # 1-TAP ENTRY SYSTEM (No forms, no radio buttons)
                 colA, colH, colB = st.columns(3)
                 with colA:
                     if st.button(f"🟢 {team_names['A']} Win", use_container_width=True):
@@ -486,7 +491,6 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                 
                 for p_name, total_shots in shots_received.items():
                     strokes_on_this_hole = allocate_strokes(total_shots, h_data['index'])
-                    # Now outputs the explicit integer instead of an asterisk string
                     row[p_name] = strokes_on_this_hole if strokes_on_this_hole > 0 else "-"
                     
                 grid_data.append(row)
