@@ -3,21 +3,25 @@ import pandas as pd
 import math
 import uuid
 import datetime
-
 from supabase import create_client, Client
 
+# --- App Configuration ---
+st.set_page_config(page_title="Matchplay Centre", layout="centered")
+
+BASE_URL = "https://matchplay-scoring.streamlit.app"
+
+# --- Supabase Initialization ---
 @st.cache_resource
 def init_connection():
     url = st.secrets["supabase"]["url"]
     key = st.secrets["supabase"]["key"]
     return create_client(url, key)
 
-supabase = init_connection()
-
-# --- App Configuration ---
-st.set_page_config(page_title="Matchplay Centre", layout="centered")
-
-BASE_URL = "https://matchplay-scoring.streamlit.app"
+try:
+    supabase = init_connection()
+except Exception as e:
+    st.error(f"Failed to initialize Supabase. Please check your secrets.toml file. Error: {e}")
+    st.stop()
 
 # --- WHS Custom Rounding ---
 def whs_round(val):
@@ -48,8 +52,20 @@ if "courses" not in st.session_state:
 if "allowances" not in st.session_state:
     st.session_state["allowances"] = {"Singles": 100, "Fourball": 90, "Foursomes": 50}
 
-if "db_matches" not in st.session_state:
-    st.session_state["db_matches"] = {} # PLACEHOLDER FOR SUPABASE
+# Load matches from Supabase on every run
+try:
+    db_res = supabase.table("matchplay_sessions").select("*").execute()
+    st.session_state["db_matches"] = {row["id"]: row["match_data"] for row in db_res.data}
+except Exception as e:
+    st.session_state["db_matches"] = {}
+    st.error("Could not fetch data from database.")
+
+# --- Database Sync Function ---
+def save_match_to_db(match_id, match_data):
+    supabase.table("matchplay_sessions").upsert({
+        "id": match_id,
+        "match_data": match_data
+    }).execute()
 
 # --- Helper Functions ---
 def calculate_course_handicap(hi, slope, rating, par):
@@ -75,7 +91,7 @@ def calculate_shots_received(match):
         lowest_ch = min(ch_dict.values())
         for p, ch in ch_dict.items():
             shots_received[p] = whs_round((ch - lowest_ch) * allowance_decimal)
-    else: # Foursomes
+    else: 
         p_keys = list(setup["players"].keys())
         team_a_ch = calculate_course_handicap(setup["players"][p_keys[0]]["hi"], tee_data["slope"], tee_data["rating"], tee_data["par"]) + \
                     calculate_course_handicap(setup["players"][p_keys[1]]["hi"], tee_data["slope"], tee_data["rating"], tee_data["par"])
@@ -111,7 +127,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
         st.rerun()
     
     st.title(f"⛳ {setup['match_name']}")
-    st.caption(f"{setup['date'].strftime('%d %b %Y')} | {setup['course']} | {setup['match_type']}")
+    st.caption(f"{setup['date']} | {setup['course']} | {setup['match_type']}")
     if not is_manager:
         st.info("👁️ **Read-Only Mode:** You are viewing the live public scorecard.")
     
@@ -121,10 +137,10 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
         current_match_score = 0
         holes_played = match.get("current_hole", 0)
 
-        # Calculate Overall Status
         for idx in range(total_holes):
-            if idx in match["scores"] and idx < holes_played:
-                scores = match["scores"][idx]
+            str_idx = str(idx)
+            if str_idx in match["scores"] and idx < holes_played:
+                scores = match["scores"][str_idx]
                 net_scores = {}
                 for p in player_entities:
                     s = scores.get(p, "NR")
@@ -146,7 +162,6 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                         if net_scores[p1] < net_scores[p2]: current_match_score += 1
                         elif net_scores[p2] < net_scores[p1]: current_match_score -= 1
 
-        # Display Top Status Bar
         st.markdown("---")
         if current_match_score > 0:
             leader = "Team A" if setup["match_type"] != "Singles" else player_entities[0]
@@ -159,21 +174,19 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
         st.caption(f"<div style='text-align: center;'>Thru {holes_played} holes</div>", unsafe_allow_html=True)
         st.markdown("---")
 
-        # Score Entry UI
         view_all = st.checkbox("View Full Scorecard", value=not is_manager)
 
         for idx in range(total_holes):
-            # Only show completed holes if view_all is checked.
-            # If manager, always show the *current* active hole.
             if not view_all and idx != holes_played:
                 continue
                 
             real_hole_idx = idx % 18
             hole_data = course_holes[real_hole_idx]
             par = hole_data['par']
+            str_idx = str(idx) 
             
-            if idx not in match["scores"]:
-                match["scores"][idx] = {p: par for p in player_entities}
+            if str_idx not in match["scores"]:
+                match["scores"][str_idx] = {p: par for p in player_entities}
             
             is_active_hole = (idx == holes_played)
             expander_title = f"⛳ Hole {idx + 1} | Par {par} | Index {hole_data['index']}"
@@ -184,25 +197,33 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                     asterisks = allocate_strokes(shots_received[p], hole_data["index"])
                     st.markdown(f"**{p}** {asterisks}")
                     
-                    c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
-                    current_val = match["scores"][idx][p]
+                    c1, c2, c3, c4, c5 = st.columns([1, 1, 1, 1, 1])
+                    current_val = match["scores"][str_idx][p]
                     
                     if is_manager and (is_active_hole or view_all):
                         with c1:
                             if st.button("➖", key=f"dec_{idx}_{p}", use_container_width=True):
                                 if isinstance(current_val, int) and current_val > 1:
-                                    match["scores"][idx][p] -= 1
+                                    match["scores"][str_idx][p] -= 1
+                                    save_match_to_db(active_match_id, match)
                                     st.rerun()
                         with c2:
                             st.markdown(f"<h3 style='text-align:center; margin:0;'>{current_val}</h3>", unsafe_allow_html=True)
                         with c3:
                             if st.button("➕", key=f"inc_{idx}_{p}", use_container_width=True):
-                                if current_val == "NR": match["scores"][idx][p] = par
-                                else: match["scores"][idx][p] += 1
+                                if current_val == "NR": match["scores"][str_idx][p] = par
+                                else: match["scores"][str_idx][p] += 1
+                                save_match_to_db(active_match_id, match)
                                 st.rerun()
                         with c4:
                             if st.button("NR", key=f"nr_{idx}_{p}", use_container_width=True):
-                                match["scores"][idx][p] = "NR"
+                                match["scores"][str_idx][p] = "NR"
+                                save_match_to_db(active_match_id, match)
+                                st.rerun()
+                        with c5:
+                            if st.button("🧹", key=f"clr_{idx}_{p}", use_container_width=True, help="Reset to Par"):
+                                match["scores"][str_idx][p] = par
+                                save_match_to_db(active_match_id, match)
                                 st.rerun()
                     else:
                         st.markdown(f"<h3 style='text-align:center;'>{current_val}</h3>", unsafe_allow_html=True)
@@ -212,15 +233,15 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                         st.caption(f"Net: {net}")
                     st.divider()
                 
-                # Confirm Button for Manager
                 if is_manager and is_active_hole:
                     if st.button(f"✅ Confirm Hole {idx + 1} Scores", type="primary", use_container_width=True):
                         match["current_hole"] = idx + 1
-                        # UPDATE SUPABASE HERE in the future
+                        save_match_to_db(active_match_id, match)
                         st.rerun()
 
         if is_manager and st.button("➕ Add Extra Hole", use_container_width=True):
             match["extra_holes"] = match.get("extra_holes", 0) + 1
+            save_match_to_db(active_match_id, match)
             st.rerun()
 
     with tab_breakdown:
@@ -257,12 +278,12 @@ else:
     
     with tab_list:
         if not st.session_state["db_matches"]:
-            st.info("No matches found in your current browser session. Create one in the next tab!")
+            st.info("No active matches found. Create one in the next tab!")
         else:
             for m_id, m_data in st.session_state["db_matches"].items():
                 with st.container(border=True):
                     st.subheader(m_data["setup"]["match_name"])
-                    st.write(f"{m_data['setup']['date'].strftime('%d %b %Y')} | {m_data['setup']['course']} | {m_data['setup']['match_type']}")
+                    st.write(f"{m_data['setup']['date']} | {m_data['setup']['course']} | {m_data['setup']['match_type']}")
                     if st.button("Open as Manager", key=f"open_{m_id}"):
                         st.query_params["match_id"] = m_id
                         st.query_params["manage"] = "true"
@@ -270,7 +291,7 @@ else:
                         
     with tab_create:
         st.header("New Match Setup")
-        match_name = st.text_input("Match Name", value="")
+        match_name = st.text_input("Match Name", value="", placeholder="e.g. Sunday Match")
         match_date = st.date_input("Date", value=datetime.date.today())
         
         c1, c2 = st.columns(2)
@@ -288,50 +309,54 @@ else:
         
         if match_type == "Singles":
             with col1: 
-                p1 = st.text_input("Player 1 Name", value="", key="s_p1_n")
+                p1 = st.text_input("Player 1 Name", value="", placeholder="Name", key="s_p1_n")
                 if use_handicaps: players[p1] = {"hi": st.number_input("Player 1 HI", value=10.0, format="%.1f", step=0.1, key="s_p1_h")}
                 else: players[p1] = {"hi": 0.0}
             with col2: 
-                p2 = st.text_input("Player 2 Name", value="", key="s_p2_n")
+                p2 = st.text_input("Player 2 Name", value="", placeholder="Name", key="s_p2_n")
                 if use_handicaps: players[p2] = {"hi": st.number_input("Player 2 HI", value=10.0, format="%.1f", step=0.1, key="s_p2_h")}
                 else: players[p2] = {"hi": 0.0}
                 
         elif match_type in ["Fourball", "Foursomes"]:
             with col1:
                 st.write("**Team A**")
-                a1 = st.text_input("P1 Name", value="", key="t_a1_n")
+                a1 = st.text_input("P1 Name", value="", placeholder="Name", key="t_a1_n")
                 if use_handicaps: players[a1] = {"hi": st.number_input("P1 HI", value=10.0, format="%.1f", step=0.1, key="t_a1_h")}
                 else: players[a1] = {"hi": 0.0}
                 
-                a2 = st.text_input("P2 Name", value="", key="t_a2_n")
+                a2 = st.text_input("P2 Name", value="", placeholder="Name", key="t_a2_n")
                 if use_handicaps: players[a2] = {"hi": st.number_input("P2 HI", value=10.0, format="%.1f", step=0.1, key="t_a2_h")}
                 else: players[a2] = {"hi": 0.0}
             with col2:
                 st.write("**Team B**")
-                b1 = st.text_input("P3 Name", value="", key="t_b1_n")
+                b1 = st.text_input("P3 Name", value="", placeholder="Name", key="t_b1_n")
                 if use_handicaps: players[b1] = {"hi": st.number_input("P3 HI", value=10.0, format="%.1f", step=0.1, key="t_b1_h")}
                 else: players[b1] = {"hi": 0.0}
                 
-                b2 = st.text_input("P4 Name", value="", key="t_b2_n")
+                b2 = st.text_input("P4 Name", value="", placeholder="Name", key="t_b2_n")
                 if use_handicaps: players[b2] = {"hi": st.number_input("P4 HI", value=10.0, format="%.1f", step=0.1, key="t_b2_h")}
                 else: players[b2] = {"hi": 0.0}
 
         if st.button("Generate Match & Link", type="primary", use_container_width=True):
-            # Form validation
             if not match_name or any(not p.strip() for p in players.keys()):
                 st.error("Please fill in the Match Name and all Player Names.")
             else:
                 new_id = uuid.uuid4().hex[:8]
-                st.session_state["db_matches"][new_id] = {
+                new_match_data = {
                     "id": new_id,
                     "setup": {
-                        "match_name": match_name, "date": match_date, "course": selected_course,
-                        "tee": selected_tee, "match_type": match_type, "use_handicaps": use_handicaps,
+                        "match_name": match_name, 
+                        "date": match_date.strftime('%d %b %Y'), 
+                        "course": selected_course,
+                        "tee": selected_tee, 
+                        "match_type": match_type, 
+                        "use_handicaps": use_handicaps,
                         "players": players
                     },
                     "scores": {}, "current_hole": 0, "extra_holes": 0
                 }
-                # PUSH TO SUPABASE HERE in the future
+                
+                save_match_to_db(new_id, new_match_data)
                 st.query_params["match_id"] = new_id
                 st.query_params["manage"] = "true"
                 st.rerun()
@@ -342,3 +367,60 @@ else:
         with c1: st.session_state["allowances"]["Singles"] = int(st.number_input("Singles (%)", value=st.session_state["allowances"]["Singles"], step=1))
         with c2: st.session_state["allowances"]["Fourball"] = int(st.number_input("Fourball (%)", value=st.session_state["allowances"]["Fourball"], step=1))
         with c3: st.session_state["allowances"]["Foursomes"] = int(st.number_input("Foursomes (%)", value=st.session_state["allowances"]["Foursomes"], step=1))
+        
+        st.divider()
+        st.header("Course Management")
+        
+        with st.expander("✏️ Manage Existing Courses"):
+            if st.session_state["courses"]:
+                edit_course = st.selectbox("Select Course to Edit", list(st.session_state["courses"].keys()))
+                course_dict = st.session_state["courses"][edit_course]
+                
+                edit_tee = st.selectbox("Select Tee", list(course_dict["tees"].keys()))
+                tee_dict = course_dict["tees"][edit_tee]
+                
+                colA, colB, colC = st.columns(3)
+                with colA: new_par = st.number_input("Course Par", value=int(tee_dict["par"]), step=1, key="edit_par")
+                with colB: new_rating = st.number_input("Rating (CR)", value=float(tee_dict["rating"]), step=0.1, format="%.1f", key="edit_cr")
+                with colC: new_slope = st.number_input("Slope", value=int(tee_dict["slope"]), step=1, key="edit_slope")
+                
+                st.write("**Hole Data**")
+                df_existing = pd.DataFrame(course_dict["holes"]).rename(columns={"hole": "Hole", "par": "Par", "index": "Index"})
+                edited_df = st.data_editor(df_existing, hide_index=True, use_container_width=True, key="edit_df")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("Save Course Updates", type="primary", use_container_width=True):
+                        st.session_state["courses"][edit_course]["tees"][edit_tee] = {"rating": new_rating, "slope": new_slope, "par": new_par}
+                        holes_list = [{"hole": int(row["Hole"]), "par": int(row["Par"]), "index": int(row["Index"])} for _, row in edited_df.iterrows()]
+                        st.session_state["courses"][edit_course]["holes"] = holes_list
+                        st.success("Course updated!")
+                with col2:
+                    if st.button("❌ Delete Course", type="secondary", use_container_width=True):
+                        del st.session_state["courses"][edit_course]
+                        st.rerun()
+            else:
+                st.info("No courses loaded.")
+
+        with st.expander("➕ Add New Course", expanded=False):
+            new_course_name = st.text_input("New Course Name")
+            new_tee_name = st.text_input("New Tee Name (e.g. White, Blue)")
+            colA, colB, colC = st.columns(3)
+            with colA: n_par = st.number_input("New Course Par", value=72, step=1)
+            with colB: n_rating = st.number_input("New Course Rating (CR)", value=72.0, step=0.1, format="%.1f")
+            with colC: n_slope = st.number_input("New Slope", value=125, step=1)
+            
+            st.write("Enter Hole Data (Par & Index):")
+            df_holes = pd.DataFrame({"Hole": range(1, 19), "Par": [4]*18, "Index": range(1, 19)})
+            new_edited_df = st.data_editor(df_holes, hide_index=True, use_container_width=True, key="new_df")
+            
+            if st.button("Save New Course", type="primary"):
+                if new_course_name and new_tee_name:
+                    if new_course_name not in st.session_state["courses"]:
+                        st.session_state["courses"][new_course_name] = {"tees": {}, "holes": []}
+                    st.session_state["courses"][new_course_name]["tees"][new_tee_name] = {"rating": n_rating, "slope": n_slope, "par": n_par}
+                    holes_list = [{"hole": int(row["Hole"]), "par": int(row["Par"]), "index": int(row["Index"])} for _, row in new_edited_df.iterrows()]
+                    st.session_state["courses"][new_course_name]["holes"] = holes_list
+                    st.success(f"{new_course_name} saved successfully!")
+                else:
+                    st.error("Please provide both Course Name and Tee Name.")
