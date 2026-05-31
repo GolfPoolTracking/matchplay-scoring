@@ -61,7 +61,6 @@ try:
     st.session_state["db_matches"] = {}
     for row in db_res.data:
         data = row.get("match_data", {})
-        # Ensure we are loading records built for this outcome-based format
         if "setup" in data and "outcomes" in data:
             st.session_state["db_matches"][row["id"]] = data
 except Exception as e:
@@ -89,51 +88,88 @@ def generate_shots_data(match):
     allowance_decimal = st.session_state["allowances"][setup["match_type"]] / 100.0
     shots_received = {}
     team_names = {"A": "", "B": ""}
+    team_display = {"A": "", "B": ""}
     
-    if setup["match_type"] == "Singles":
+    # Safely extract explicit team arrays to prevent any mix-ups
+    if "team_a" in setup and "team_b" in setup:
+        p_A = setup["team_a"]
+        p_B = setup["team_b"]
+    else:
         p_keys = list(setup["players"].keys())
-        team_names["A"], team_names["B"] = p_keys[0], p_keys[1]
+        if setup["match_type"] == "Singles":
+            p_A = [p_keys[0]] if len(p_keys) > 0 else ["P1"]
+            p_B = [p_keys[1]] if len(p_keys) > 1 else ["P2"]
+        else:
+            p_A = [p_keys[0], p_keys[1]] if len(p_keys) > 1 else ["P1", "P2"]
+            p_B = [p_keys[2], p_keys[3]] if len(p_keys) > 3 else ["P3", "P4"]
+            
+    if setup["match_type"] == "Singles":
+        team_names["A"], team_names["B"] = p_A[0], p_B[0]
         
         if not setup.get("use_handicaps", True):
-            return {team_names["A"]: 0, team_names["B"]: 0}, team_names
+            team_display["A"], team_display["B"] = team_names["A"], team_names["B"]
+            return {team_names["A"]: 0, team_names["B"]: 0}, team_names, team_display
 
         ch_dict = {p: calculate_course_handicap(data["hi"], tee_data["slope"], tee_data["rating"], tee_data["par"]) for p, data in setup["players"].items()}
         lowest_ch = min(ch_dict.values())
         for p, ch in ch_dict.items():
             shots_received[p] = whs_round((ch - lowest_ch) * allowance_decimal)
+            
+        sh_a = shots_received.get(team_names["A"], 0)
+        sh_b = shots_received.get(team_names["B"], 0)
+        team_display["A"] = f"{team_names['A']} ({sh_a})" if sh_a > 0 else team_names["A"]
+        team_display["B"] = f"{team_names['B']} ({sh_b})" if sh_b > 0 else team_names["B"]
 
     elif setup["match_type"] == "Fourball":
-        p_keys = list(setup["players"].keys())
-        team_names["A"] = f"{p_keys[0]} & {p_keys[1]}"
-        team_names["B"] = f"{p_keys[2]} & {p_keys[3]}"
+        team_names["A"] = f"{p_A[0]} & {p_A[1]}"
+        team_names["B"] = f"{p_B[0]} & {p_B[1]}"
         
         if not setup.get("use_handicaps", True):
-            shots_received = {p: 0 for p in p_keys}
-            return shots_received, team_names
+            shots_received = {p: 0 for p in p_A + p_B}
+            team_display["A"], team_display["B"] = team_names["A"], team_names["B"]
+            return shots_received, team_names, team_display
 
-        ch_dict = {p: calculate_course_handicap(data["hi"], tee_data["slope"], tee_data["rating"], tee_data["par"]) for p, data in setup["players"].items()}
+        ch_dict = {p: calculate_course_handicap(setup["players"][p]["hi"], tee_data["slope"], tee_data["rating"], tee_data["par"]) for p in p_A + p_B if p in setup["players"]}
+        if not ch_dict:
+            return {}, team_names, team_names
+            
         lowest_ch = min(ch_dict.values())
         for p, ch in ch_dict.items():
             shots_received[p] = whs_round((ch - lowest_ch) * allowance_decimal)
+            
+        disp_a1 = f"{p_A[0]} ({shots_received.get(p_A[0],0)})" if shots_received.get(p_A[0],0) > 0 else p_A[0]
+        disp_a2 = f"{p_A[1]} ({shots_received.get(p_A[1],0)})" if shots_received.get(p_A[1],0) > 0 else p_A[1]
+        team_display["A"] = f"{disp_a1} & {disp_a2}"
+        
+        disp_b1 = f"{p_B[0]} ({shots_received.get(p_B[0],0)})" if shots_received.get(p_B[0],0) > 0 else p_B[0]
+        disp_b2 = f"{p_B[1]} ({shots_received.get(p_B[1],0)})" if shots_received.get(p_B[1],0) > 0 else p_B[1]
+        team_display["B"] = f"{disp_b1} & {disp_b2}"
 
     else: # Foursomes
-        p_keys = list(setup["players"].keys())
-        team_names["A"] = f"{p_keys[0]} & {p_keys[1]}"
-        team_names["B"] = f"{p_keys[2]} & {p_keys[3]}"
+        team_names["A"] = f"{p_A[0]} & {p_A[1]}"
+        team_names["B"] = f"{p_B[0]} & {p_B[1]}"
         
         if not setup.get("use_handicaps", True):
-            return {team_names["A"]: 0, team_names["B"]: 0}, team_names
+            team_display["A"], team_display["B"] = team_names["A"], team_names["B"]
+            return {team_names["A"]: 0, team_names["B"]: 0}, team_names, team_display
 
-        team_a_ch = calculate_course_handicap(setup["players"][p_keys[0]]["hi"], tee_data["slope"], tee_data["rating"], tee_data["par"]) + \
-                    calculate_course_handicap(setup["players"][p_keys[1]]["hi"], tee_data["slope"], tee_data["rating"], tee_data["par"])
-        team_b_ch = calculate_course_handicap(setup["players"][p_keys[2]]["hi"], tee_data["slope"], tee_data["rating"], tee_data["par"]) + \
-                    calculate_course_handicap(setup["players"][p_keys[3]]["hi"], tee_data["slope"], tee_data["rating"], tee_data["par"])
+        if p_A[0] not in setup["players"]: return {}, team_names, team_names
         
-        diff = whs_round(abs(team_a_ch - team_b_ch) * allowance_decimal)
-        shots_received[team_names["A"]] = 0 if team_a_ch <= team_b_ch else diff
-        shots_received[team_names["B"]] = 0 if team_b_ch <= team_a_ch else diff
+        ch_A = calculate_course_handicap(setup["players"][p_A[0]]["hi"], tee_data["slope"], tee_data["rating"], tee_data["par"]) + \
+               calculate_course_handicap(setup["players"][p_A[1]]["hi"], tee_data["slope"], tee_data["rating"], tee_data["par"])
+        ch_B = calculate_course_handicap(setup["players"][p_B[0]]["hi"], tee_data["slope"], tee_data["rating"], tee_data["par"]) + \
+               calculate_course_handicap(setup["players"][p_B[1]]["hi"], tee_data["slope"], tee_data["rating"], tee_data["par"])
+        
+        diff = whs_round(abs(ch_A - ch_B) * allowance_decimal)
+        shots_received[team_names["A"]] = 0 if ch_A <= ch_B else diff
+        shots_received[team_names["B"]] = 0 if ch_B <= ch_A else diff
+        
+        sh_a = shots_received[team_names["A"]]
+        sh_b = shots_received[team_names["B"]]
+        team_display["A"] = f"{team_names['A']} ({sh_a})" if sh_a > 0 else team_names["A"]
+        team_display["B"] = f"{team_names['B']} ({sh_b})" if sh_b > 0 else team_names["B"]
 
-    return shots_received, team_names
+    return shots_received, team_names, team_display
 
 def get_match_status(outcomes, total_holes):
     score = 0
@@ -172,7 +208,7 @@ COLOR_B = "#6366f1"
 COLOR_H = "#9ca3af"
 COLOR_NP = "#f3f4f6"
 
-def render_live_card(match_data, team_names, shots_received, total_holes):
+def render_live_card(match_data, team_display, total_holes):
     setup = match_data["setup"]
     outcomes = match_data.get("outcomes", {})
     
@@ -185,29 +221,21 @@ def render_live_card(match_data, team_names, shots_received, total_holes):
     border_a = "none"
     border_b = "none"
     
-    shots_a = shots_received.get(team_names['A'], 0)
-    shots_b = shots_received.get(team_names['B'], 0)
-    
-    # 2-line layout components for Team A
-    name_a_html = f"<span style='display:inline-block; width:10px; height:10px; border-radius:50%; background-color:{COLOR_A}; margin-right:8px;'></span>{team_names['A']}"
-    shots_a_html = f"<div style='font-size: 10px; font-weight: normal; margin-top: 2px; opacity: 0.8;'>{shots_a} Shots</div>" if shots_a > 0 else ""
-    
-    # 2-line layout components for Team B
-    name_b_html = f"{team_names['B']}<span style='display:inline-block; width:10px; height:10px; border-radius:50%; background-color:{COLOR_B}; margin-left:8px;'></span>"
-    shots_b_html = f"<div style='font-size: 10px; font-weight: normal; margin-top: 2px; opacity: 0.8;'>{shots_b} Shots</div>" if shots_b > 0 else ""
+    name_a_html = f"<span style='display:inline-block; width:10px; height:10px; border-radius:50%; background-color:{COLOR_A}; margin-right:8px;'></span>{team_display['A']}"
+    name_b_html = f"{team_display['B']}<span style='display:inline-block; width:10px; height:10px; border-radius:50%; background-color:{COLOR_B}; margin-left:8px;'></span>"
     
     if leader == "A":
         bg_a, text_a = COLOR_A, "white"
         shape_a = "polygon(0% 0%, 92% 0%, 100% 50%, 92% 100%, 0% 100%)"
         border_a = f"1px solid {COLOR_A}"
         status_text = f"<span style='color: {COLOR_A};'>{final_str}</span>"
-        name_a_html = team_names['A'] 
+        name_a_html = team_display['A'] 
     elif leader == "B":
         bg_b, text_b = COLOR_B, "white"
         shape_b = "polygon(8% 0%, 100% 0%, 100% 100%, 8% 100%, 0% 50%)"
         border_b = f"1px solid {COLOR_B}"
         status_text = f"<span style='color: {COLOR_B};'>{final_str}</span>"
-        name_b_html = team_names['B'] 
+        name_b_html = team_display['B'] 
     else:
         status_text = "<span style='color: #555;'>ALL SQ</span>"
 
@@ -229,36 +257,36 @@ def render_live_card(match_data, team_names, shots_received, total_holes):
             {setup['match_name']} - {setup['match_type']}
         </div>
         
-        <div style="display: flex; align-items: center; justify-content: space-between; height: 75px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px;">
+        <div style="display: flex; align-items: stretch; justify-content: space-between; min-height: 65px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px;">
             
-            <div style="flex: 1; height: 100%; background: {bg_a}; color: {text_a}; display: flex; flex-direction: column; justify-content: center; padding-left: 15px; border-radius: 6px 0 0 6px; clip-path: {shape_a}; border: {border_a}; overflow: hidden;">
-                <div style="font-weight: bold; font-size: 15px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">
+            <!-- Team A Side -->
+            <div style="flex: 1; background: {bg_a}; color: {text_a}; display: flex; align-items: center; justify-content: flex-start; padding: 10px 15px; border-radius: 6px 0 0 6px; clip-path: {shape_a}; border: {border_a};">
+                <div style="font-weight: bold; font-size: 13px; line-height: 1.4;">
                     {name_a_html}
                 </div>
-                {shots_a_html}
             </div>
             
-            <div style="width: 100px; text-align: center; display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; padding: 0 5px;">
+            <!-- Center Status -->
+            <div style="width: 90px; text-align: center; display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; padding: 0 5px;">
                 <span style="font-size: 11px; color: #999; text-transform: uppercase; margin-bottom: 2px; font-weight: bold;">{subtext}</span>
                 <span style="font-size: 18px; font-weight: 800;">{status_text}</span>
             </div>
             
-            <div style="flex: 1; height: 100%; background: {bg_b}; color: {text_b}; display: flex; flex-direction: column; justify-content: center; align-items: flex-end; padding-right: 15px; border-radius: 0 6px 6px 0; clip-path: {shape_b}; border: {border_b}; overflow: hidden;">
-                <div style="font-weight: bold; font-size: 15px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">
+            <!-- Team B Side -->
+            <div style="flex: 1; background: {bg_b}; color: {text_b}; display: flex; align-items: center; justify-content: flex-end; padding: 10px 15px; border-radius: 0 6px 6px 0; clip-path: {shape_b}; border: {border_b}; text-align: right;">
+                <div style="font-weight: bold; font-size: 13px; line-height: 1.4;">
                     {name_b_html}
                 </div>
-                {shots_b_html}
             </div>
             
         </div>
         
+        <!-- History Bubbles -->
         <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
             {circles_html}
         </div>
     </div>
     """
-    
-    # Compress string to avoid markdown bugs
     st.html(html_string.replace('\n', ''))
 
 def render_compact_grid(outcomes, total_holes, active_match_id, current_hole):
@@ -311,7 +339,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
     course_holes = st.session_state["courses"][setup["course"]]["holes"]
     total_holes = 18 + match_data.get("extra_holes", 0)
     
-    shots_received, team_names = generate_shots_data(match_data)
+    shots_received, team_names, team_display = generate_shots_data(match_data)
     
     if not is_manager:
         # ==========================================
@@ -323,11 +351,11 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                 st.rerun()
                 
         st.html("<h4 style='text-align: center; color: #666; margin-top: 10px; font-family: sans-serif;'>Live Matchplay Scoreboard</h4>")
-        render_live_card(match_data, team_names, shots_received, total_holes)
+        render_live_card(match_data, team_display, total_holes)
 
     else:
         # ==========================================
-        # MANAGER VIEW (Custom Tab Implementation)
+        # MANAGER VIEW
         # ==========================================
         st.button("⬅ Back to Menu", on_click=lambda: st.query_params.clear())
         
@@ -352,7 +380,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
         st.divider()
 
         if active_tab == "Scoreboard":
-            render_live_card(match_data, team_names, shots_received, total_holes)
+            render_live_card(match_data, team_display, total_holes)
             
         elif active_tab == "Score Entry":
             leader, amount, holes_played, match_over, final_str = get_match_status(match_data.get("outcomes", {}), total_holes)
@@ -404,11 +432,6 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             str_h = str(curr_hole)
             
             current_val = match_data["outcomes"].get(str_h, "H")
-            
-            shots_a = shots_received.get(team_names['A'], 0)
-            shots_b = shots_received.get(team_names['B'], 0)
-            disp_a = f"{team_names['A']} ({shots_a} Shots)" if shots_a > 0 else team_names['A']
-            disp_b = f"{team_names['B']} ({shots_b} Shots)" if shots_b > 0 else team_names['B']
 
             with st.container(border=True):
                 st.markdown(f"<div style='text-align:center; color:gray; font-size:14px; margin-bottom:15px;'>Par {h_data['par']} &nbsp;|&nbsp; Index {h_data['index']}</div>", unsafe_allow_html=True)
@@ -418,9 +441,9 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                     options=["Not Played", "A", "H", "B"],
                     format_func=lambda x: {
                         "Not Played": "⚪ Not Played / Clear",
-                        "A": f"🟢 {disp_a} Won",
+                        "A": f"🟢 {team_display['A']} Won",
                         "H": "🔘 Halved",
-                        "B": f"🟣 {disp_b} Won"
+                        "B": f"🟣 {team_display['B']} Won"
                     }[x],
                     index=["Not Played", "A", "H", "B"].index(current_val),
                     horizontal=False,
@@ -481,7 +504,6 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                 new_name = st.text_input("Match Name", value=setup["match_name"])
                 
                 c1, c2 = st.columns(2)
-                # Safely find indices in the lists, default to 0 if the course was deleted
                 c_list = list(st.session_state["courses"].keys())
                 c_idx = c_list.index(setup["course"]) if setup["course"] in c_list else 0
                 with c1: 
@@ -495,31 +517,72 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                 new_uh = st.checkbox("Use Handicaps", value=setup.get("use_handicaps", True))
                 
                 st.divider()
-                st.write("**Player Details**")
                 
                 new_players = {}
-                for idx, (p_name, p_data) in enumerate(setup["players"].items()):
-                    pcol1, pcol2 = st.columns([2, 1])
-                    with pcol1:
-                        edited_name = st.text_input(f"Player {idx+1} Name", value=p_name, key=f"edit_name_{idx}")
-                    with pcol2:
-                        edited_hi = st.number_input("HI", value=float(p_data["hi"]), format="%.1f", step=0.1, key=f"edit_hi_{idx}")
+                if setup["match_type"] == "Singles":
+                    p_A = setup.get("team_a", [list(setup["players"].keys())[0]])
+                    p_B = setup.get("team_b", [list(setup["players"].keys())[1]])
                     
-                    # Prevent duplicate names overriding each other by appending a space if needed
-                    while edited_name in new_players:
-                        edited_name += " "
-                    new_players[edited_name] = {"hi": edited_hi}
-
-                if st.form_submit_button("💾 Save Changes", type="primary", use_container_width=True):
-                    match_data["setup"]["match_name"] = new_name
-                    match_data["setup"]["course"] = new_course
-                    match_data["setup"]["tee"] = new_tee
-                    match_data["setup"]["use_handicaps"] = new_uh
-                    match_data["setup"]["players"] = new_players
+                    st.write("**Player Setup**")
+                    col1, col2 = st.columns(2)
+                    with col1: 
+                        e_a1 = st.text_input("Player 1 Name", value=p_A[0])
+                        e_hi_a1 = st.number_input("Player 1 HI", value=float(setup["players"][p_A[0]]["hi"]), step=0.1)
+                    with col2: 
+                        e_b1 = st.text_input("Player 2 Name", value=p_B[0])
+                        e_hi_b1 = st.number_input("Player 2 HI", value=float(setup["players"][p_B[0]]["hi"]), step=0.1)
+                        
+                    if st.form_submit_button("💾 Save Changes", type="primary", use_container_width=True):
+                        new_players = {e_a1: {"hi": e_hi_a1}, e_b1: {"hi": e_hi_b1}}
+                        match_data["setup"]["match_name"] = new_name
+                        match_data["setup"]["course"] = new_course
+                        match_data["setup"]["tee"] = new_tee
+                        match_data["setup"]["use_handicaps"] = new_uh
+                        match_data["setup"]["players"] = new_players
+                        match_data["setup"]["team_a"] = [e_a1]
+                        match_data["setup"]["team_b"] = [e_b1]
+                        
+                        save_match_to_db(active_match_id, match_data)
+                        st.success("Match updated successfully!")
+                        st.rerun()
+                else:
+                    p_A = setup.get("team_a", list(setup["players"].keys())[0:2])
+                    p_B = setup.get("team_b", list(setup["players"].keys())[2:4])
                     
-                    save_match_to_db(active_match_id, match_data)
-                    st.success("Match details updated successfully!")
-                    st.rerun()
+                    st.write("**Team A**")
+                    colA1, colA2 = st.columns(2)
+                    with colA1:
+                        e_a1 = st.text_input("P1 Name", value=p_A[0])
+                        e_hi_a1 = st.number_input("P1 HI", value=float(setup["players"][p_A[0]]["hi"]), step=0.1)
+                    with colA2:
+                        e_a2 = st.text_input("P2 Name", value=p_A[1])
+                        e_hi_a2 = st.number_input("P2 HI", value=float(setup["players"][p_A[1]]["hi"]), step=0.1)
+                        
+                    st.write("**Team B**")
+                    colB1, colB2 = st.columns(2)
+                    with colB1:
+                        e_b1 = st.text_input("P3 Name", value=p_B[0])
+                        e_hi_b1 = st.number_input("P3 HI", value=float(setup["players"][p_B[0]]["hi"]), step=0.1)
+                    with colB2:
+                        e_b2 = st.text_input("P4 Name", value=p_B[1])
+                        e_hi_b2 = st.number_input("P4 HI", value=float(setup["players"][p_B[1]]["hi"]), step=0.1)
+                        
+                    if st.form_submit_button("💾 Save Changes", type="primary", use_container_width=True):
+                        new_players = {
+                            e_a1: {"hi": e_hi_a1}, e_a2: {"hi": e_hi_a2},
+                            e_b1: {"hi": e_hi_b1}, e_b2: {"hi": e_hi_b2}
+                        }
+                        match_data["setup"]["match_name"] = new_name
+                        match_data["setup"]["course"] = new_course
+                        match_data["setup"]["tee"] = new_tee
+                        match_data["setup"]["use_handicaps"] = new_uh
+                        match_data["setup"]["players"] = new_players
+                        match_data["setup"]["team_a"] = [e_a1, e_a2]
+                        match_data["setup"]["team_b"] = [e_b1, e_b2]
+                        
+                        save_match_to_db(active_match_id, match_data)
+                        st.success("Match updated successfully!")
+                        st.rerun()
 
         elif active_tab == "Share Links":
             st.write("**Public Leaderboard Link (Send to players):**")
@@ -564,9 +627,9 @@ else:
         st.divider()
         st.subheader("Players & Handicaps")
         players = {}
-        col1, col2 = st.columns(2)
         
         if match_type == "Singles":
+            col1, col2 = st.columns(2)
             with col1: 
                 p1 = st.text_input("Player 1 Name", key="s_p1_n")
                 if use_handicaps: players[p1] = {"hi": st.number_input("Player 1 HI", value=10.0, format="%.1f", step=0.1, key="s_p1_h")}
@@ -576,49 +639,80 @@ else:
                 if use_handicaps: players[p2] = {"hi": st.number_input("Player 2 HI", value=10.0, format="%.1f", step=0.1, key="s_p2_h")}
                 else: players[p2] = {"hi": 0.0}
                 
+            if st.button("Generate Match & Link", type="primary", use_container_width=True):
+                if not match_name or not p1.strip() or not p2.strip():
+                    st.error("Please fill in the Match Name and all Player Names.")
+                else:
+                    new_id = uuid.uuid4().hex[:8]
+                    new_data = {
+                        "id": new_id,
+                        "setup": {
+                            "match_name": match_name,
+                            "date": match_date.strftime('%d %b %Y'),
+                            "course": selected_course,
+                            "tee": selected_tee,
+                            "match_type": match_type,
+                            "use_handicaps": use_handicaps,
+                            "players": players,
+                            "team_a": [p1],
+                            "team_b": [p2]
+                        },
+                        "outcomes": {},
+                        "extra_holes": 0
+                    }
+                    save_match_to_db(new_id, new_data)
+                    st.query_params["match_id"] = new_id
+                    st.query_params["manage"] = "true"
+                    st.rerun()
+                
         elif match_type in ["Fourball", "Foursomes"]:
-            with col1:
-                st.write("**Team A**")
+            st.write("**Team A**")
+            colA1, colA2 = st.columns(2)
+            with colA1:
                 a1 = st.text_input("P1 Name", key="t_a1_n")
                 if use_handicaps: players[a1] = {"hi": st.number_input("P1 HI", value=10.0, format="%.1f", step=0.1, key="t_a1_h")}
                 else: players[a1] = {"hi": 0.0}
-                
+            with colA2:
                 a2 = st.text_input("P2 Name", key="t_a2_n")
                 if use_handicaps: players[a2] = {"hi": st.number_input("P2 HI", value=10.0, format="%.1f", step=0.1, key="t_a2_h")}
                 else: players[a2] = {"hi": 0.0}
-            with col2:
-                st.write("**Team B**")
+                
+            st.write("**Team B**")
+            colB1, colB2 = st.columns(2)
+            with colB1:
                 b1 = st.text_input("P3 Name", key="t_b1_n")
                 if use_handicaps: players[b1] = {"hi": st.number_input("P3 HI", value=10.0, format="%.1f", step=0.1, key="t_b1_h")}
                 else: players[b1] = {"hi": 0.0}
-                
+            with colB2:
                 b2 = st.text_input("P4 Name", key="t_b2_n")
                 if use_handicaps: players[b2] = {"hi": st.number_input("P4 HI", value=10.0, format="%.1f", step=0.1, key="t_b2_h")}
                 else: players[b2] = {"hi": 0.0}
 
-        if st.button("Generate Match & Link", type="primary", use_container_width=True):
-            if not match_name or any(not p.strip() for p in players.keys()):
-                st.error("Please fill in the Match Name and all Player Names.")
-            else:
-                new_id = uuid.uuid4().hex[:8]
-                new_data = {
-                    "id": new_id,
-                    "setup": {
-                        "match_name": match_name,
-                        "date": match_date.strftime('%d %b %Y'),
-                        "course": selected_course,
-                        "tee": selected_tee,
-                        "match_type": match_type,
-                        "use_handicaps": use_handicaps,
-                        "players": players
-                    },
-                    "outcomes": {},
-                    "extra_holes": 0
-                }
-                save_match_to_db(new_id, new_data)
-                st.query_params["match_id"] = new_id
-                st.query_params["manage"] = "true"
-                st.rerun()
+            if st.button("Generate Match & Link", type="primary", use_container_width=True):
+                if not match_name or any(not p.strip() for p in [a1, a2, b1, b2]):
+                    st.error("Please fill in the Match Name and all Player Names.")
+                else:
+                    new_id = uuid.uuid4().hex[:8]
+                    new_data = {
+                        "id": new_id,
+                        "setup": {
+                            "match_name": match_name,
+                            "date": match_date.strftime('%d %b %Y'),
+                            "course": selected_course,
+                            "tee": selected_tee,
+                            "match_type": match_type,
+                            "use_handicaps": use_handicaps,
+                            "players": players,
+                            "team_a": [a1, a2],
+                            "team_b": [b1, b2]
+                        },
+                        "outcomes": {},
+                        "extra_holes": 0
+                    }
+                    save_match_to_db(new_id, new_data)
+                    st.query_params["match_id"] = new_id
+                    st.query_params["manage"] = "true"
+                    st.rerun()
                 
     with tab_admin:
         st.header("Global Allowances")
