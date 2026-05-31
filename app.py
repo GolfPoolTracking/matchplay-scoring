@@ -223,21 +223,34 @@ def render_live_card(match_data, team_names, total_holes):
     html_string = f"""<div style="background: white; border: 1px solid #eaeaea; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 20px; margin-top: 10px; font-family: sans-serif;"><div style="text-align: center; color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 1px;">{setup['match_name']} - {setup['match_type']}</div><div style="display: flex; align-items: center; justify-content: space-between; height: 65px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px;"><div style="flex: 1; height: 100%; background: {bg_a}; color: {text_a}; display: flex; align-items: center; padding-left: 15px; font-weight: bold; font-size: 15px; border-radius: 6px 0 0 6px; clip-path: {shape_a}; border: {border_a};">{name_a_display}</div><div style="width: 100px; text-align: center; display: flex; flex-direction: column; justify-content: center;"><span style="font-size: 11px; color: #999; text-transform: uppercase; margin-bottom: 2px; font-weight: bold;">{subtext}</span><span style="font-size: 18px; font-weight: 800;">{status_text}</span></div><div style="flex: 1; height: 100%; background: {bg_b}; color: {text_b}; display: flex; align-items: center; justify-content: flex-end; padding-right: 15px; font-weight: bold; font-size: 15px; border-radius: 0 6px 6px 0; clip-path: {shape_b}; border: {border_b};">{name_b_display}</div></div><div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">{circles_html}</div></div>"""
     st.html(html_string)
 
-def render_compact_grid(outcomes, total_holes):
+def render_compact_grid(outcomes, total_holes, active_match_id, current_hole):
     def get_color(hole_val):
         if hole_val == "A": return COLOR_A, "white"
         if hole_val == "B": return COLOR_B, "white"
         if hole_val == "H": return COLOR_H, "white"
         return COLOR_NP, "#9ca3af"
 
-    html = "<div style='display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; font-family: sans-serif;'>"
+    html = """
+    <style>
+    .hole-box { transition: transform 0.1s, opacity 0.1s; cursor: pointer; }
+    .hole-box:hover { transform: scale(1.1); opacity: 0.8; }
+    </style>
+    <div style='display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; font-family: sans-serif;'>
+    """
     
     def make_row(start, end):
         row_html = "<div style='display: flex; gap: 6px; justify-content: center;'>"
         for i in range(start, end + 1):
             val = outcomes.get(str(i), "Not Played")
             bg, txt = get_color(val)
-            row_html += f"<div style='width: 32px; height: 32px; border-radius: 6px; background: {bg}; color: {txt}; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: bold; border: 1px solid #e5e7eb;'>{i}</div>"
+            
+            # Add a dark shadow ring if this is the currently selected hole
+            ring = "box-shadow: 0 0 0 3px #1f2937;" if i == current_hole else ""
+            
+            # Interactive link via query params
+            row_html += f"<a href='?match_id={active_match_id}&manage=true&hole={i}' target='_self' style='text-decoration: none;'>"
+            row_html += f"<div class='hole-box' style='width: 32px; height: 32px; border-radius: 6px; background: {bg}; color: {txt}; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: bold; border: 1px solid #e5e7eb; {ring}'>{i}</div>"
+            row_html += "</a>"
         row_html += "</div>"
         return row_html
 
@@ -291,6 +304,17 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             leader, amount, holes_played, match_over, final_str = get_match_status(match_data.get("outcomes", {}), total_holes)
             state_key = f"entry_hole_{active_match_id}"
 
+            # Intercept URL param for jumping to a specific hole via grid click
+            if "hole" in st.query_params:
+                try:
+                    jump_hole = int(st.query_params["hole"])
+                    if 1 <= jump_hole <= total_holes:
+                        st.session_state[state_key] = jump_hole
+                except ValueError:
+                    pass
+                del st.query_params["hole"] # Clear so it doesn't get stuck
+
+            # Initialize state if not set
             if state_key not in st.session_state:
                 if match_over:
                     st.session_state[state_key] = holes_played
@@ -305,8 +329,8 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             else:
                 st.write("Record the outcome below. The system will automatically detect when the match is over.")
 
-            # Render the compact grid
-            st.html(render_compact_grid(match_data.get("outcomes", {}), total_holes))
+            # Render the interactive compact grid
+            st.html(render_compact_grid(match_data.get("outcomes", {}), total_holes, active_match_id, curr_hole))
 
             st.divider()
             c1, c2, c3 = st.columns([1, 2, 1])
