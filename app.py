@@ -90,7 +90,6 @@ def generate_shots_data(match):
     team_names = {"A": "", "B": ""}
     team_display = {"A": "", "B": ""}
     
-    # Safely extract explicit team arrays to prevent any mix-ups
     if "team_a" in setup and "team_b" in setup:
         p_A = setup["team_a"]
         p_B = setup["team_b"]
@@ -263,26 +262,17 @@ def render_live_card(match_data, team_display, total_holes):
         </div>
         
         <div style="display: flex; align-items: stretch; justify-content: space-between; min-height: 65px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px;">
-            
             <div style="flex: 1; background: {bg_a}; color: {text_a}; display: flex; align-items: center; justify-content: flex-start; padding: 10px 15px; border-radius: 6px 0 0 6px; clip-path: {shape_a}; border: {border_a};">
-                <div style="font-weight: bold; font-size: 13px; line-height: 1.4;">
-                    {name_a_html}
-                </div>
+                <div style="font-weight: bold; font-size: 13px; line-height: 1.4;">{name_a_html}</div>
             </div>
-            
             <div style="width: 90px; text-align: center; display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; padding: 0 5px;">
                 <span style="font-size: 11px; color: #999; text-transform: uppercase; margin-bottom: 2px; font-weight: bold;">{subtext}</span>
                 <span style="font-size: 18px; font-weight: 800;">{status_text}</span>
             </div>
-            
             <div style="flex: 1; background: {bg_b}; color: {text_b}; display: flex; align-items: center; justify-content: flex-end; padding: 10px 15px; border-radius: 0 6px 6px 0; clip-path: {shape_b}; border: {border_b}; text-align: right;">
-                <div style="font-weight: bold; font-size: 13px; line-height: 1.4;">
-                    {name_b_html}
-                </div>
+                <div style="font-weight: bold; font-size: 13px; line-height: 1.4;">{name_b_html}</div>
             </div>
-            
         </div>
-        
         <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
             {circles_html}
         </div>
@@ -310,9 +300,7 @@ def render_compact_grid(outcomes, total_holes, active_match_id, current_hole):
         for i in range(start, end + 1):
             val = outcomes.get(str(i), "Not Played")
             bg, txt = get_color(val)
-            
             ring = "box-shadow: 0 0 0 3px #1f2937;" if i == current_hole else ""
-            
             row_html += f"<a href='?match_id={active_match_id}&manage=true&hole={i}&tab_jump=Score%20Entry' target='_self' style='text-decoration: none;'>"
             row_html += f"<div class='hole-box' style='width: 32px; height: 32px; border-radius: 6px; background: {bg}; color: {txt}; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: bold; border: 1px solid #e5e7eb; {ring}'>{i}</div>"
             row_html += "</a>"
@@ -328,7 +316,6 @@ def render_compact_grid(outcomes, total_holes, active_match_id, current_hole):
     html += "</div>"
     return html
 
-
 # --- Routing Logic ---
 query_params = st.query_params
 active_match_id = query_params.get("match_id", None)
@@ -343,9 +330,6 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
     shots_received, team_names, team_display = generate_shots_data(match_data)
     
     if not is_manager:
-        # ==========================================
-        # PUBLIC READ-ONLY DASHBOARD
-        # ==========================================
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             if st.button("🔄 Refresh Scoreboard", use_container_width=True):
@@ -355,9 +339,6 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
         render_live_card(match_data, team_display, total_holes)
 
     else:
-        # ==========================================
-        # MANAGER VIEW (Custom Tab Implementation)
-        # ==========================================
         st.button("⬅ Back to Menu", on_click=lambda: st.query_params.clear())
         
         tab_options = ["Scoreboard", "Score Entry", "Shots Allocation", "Edit Match", "Share Links"]
@@ -408,9 +389,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             if match_over:
                 winner = team_names[leader] if leader in team_names else "Match"
                 st.success(f"🎉 **Match Finished!** {winner} wins {final_str}")
-            else:
-                st.write("Record the outcome below. The system will automatically detect when the match is over.")
-
+            
             st.html(render_compact_grid(match_data.get("outcomes", {}), total_holes, active_match_id, curr_hole))
 
             st.divider()
@@ -434,40 +413,48 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             
             current_val = match_data["outcomes"].get(str_h, "H")
 
-            # FORMS FIX: Wrapping inside an st.form prevents rapid radio button clicks from being ignored
-            with st.form(key=f"outcome_form_hole_{curr_hole}", border=True):
+            with st.container(border=True):
                 st.markdown(f"<div style='text-align:center; color:gray; font-size:14px; margin-bottom:15px;'>Par {h_data['par']} &nbsp;|&nbsp; Index {h_data['index']}</div>", unsafe_allow_html=True)
                 
-                outcome = st.radio(
-                    "Result",
-                    options=["Not Played", "A", "H", "B"],
-                    format_func=lambda x: {
-                        "Not Played": "⚪ Not Played / Clear",
-                        "A": f"🟢 {team_display['A']} Won",
-                        "H": "🔘 Halved",
-                        "B": f"🟣 {team_display['B']} Won"
-                    }[x],
-                    index=["Not Played", "A", "H", "B"].index(current_val),
-                    horizontal=False,
-                    label_visibility="collapsed"
-                )
+                status_map = {
+                    "Not Played": "⚪ Not Played / Clear",
+                    "A": f"🟢 {team_display['A']} Won",
+                    "H": "🔘 Halved",
+                    "B": f"🟣 {team_display['B']} Won"
+                }
                 
-                st.write("")
-                submit_label = "✅ Save & Next" if not match_over else "✅ Save Update"
+                # Show current explicitly so user always knows the state
+                bg_color = {"Not Played": "#f3f4f6", "A": "#d1fae5", "H": "#f3f4f6", "B": "#e0e7ff"}.get(current_val, "#f3f4f6")
+                st.markdown(f"<div style='text-align:center; font-size:15px; font-weight:bold; margin-bottom:20px; padding:10px; background-color:{bg_color}; border-radius:8px;'>Current Result: {status_map[current_val]}</div>", unsafe_allow_html=True)
                 
-                if st.form_submit_button(submit_label, type="primary", use_container_width=True):
-                    if outcome == "Not Played":
+                def update_and_advance(val):
+                    if val == "Not Played":
                         match_data["outcomes"].pop(str_h, None)
                     else:
-                        match_data["outcomes"][str_h] = outcome
-                    
+                        match_data["outcomes"][str_h] = val
                     save_match_to_db(active_match_id, match_data)
-                    
                     l, a, hp, mo, fs = get_match_status(match_data["outcomes"], total_holes)
-                    
-                    if outcome != "Not Played" and not mo and curr_hole < total_holes:
-                        st.session_state[state_key] += 1
-                        
+                    if val != "Not Played" and not mo and curr_hole < total_holes:
+                        st.session_state[state_key] = curr_hole + 1
+
+                # 1-Tap Entry System
+                btn_A, btn_H, btn_B = st.columns(3)
+                with btn_A:
+                    if st.button("🟢 Team A", use_container_width=True):
+                        update_and_advance("A")
+                        st.rerun()
+                with btn_H:
+                    if st.button("🔘 Halved", use_container_width=True):
+                        update_and_advance("H")
+                        st.rerun()
+                with btn_B:
+                    if st.button("🟣 Team B", use_container_width=True):
+                        update_and_advance("B")
+                        st.rerun()
+                
+                st.write("")
+                if st.button("⚪ Clear Result", use_container_width=True):
+                    update_and_advance("Not Played")
                     st.rerun()
 
             if not match_over and st.button("➕ Add Extra Hole", use_container_width=True):
@@ -535,7 +522,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                         e_hi_b1 = st.number_input("Player 2 HI", value=float(setup["players"][p_B[0]]["hi"]), format="%.1f", step=0.1)
                         
                     if st.form_submit_button("💾 Save Changes", type="primary", use_container_width=True):
-                        new_players = {e_a1: {"hi": e_hi_a1}, e_b1: {"hi": e_hi_b1}}
+                        new_players = {e_a1: {"hi": round(e_hi_a1, 1)}, e_b1: {"hi": round(e_hi_b1, 1)}}
                         match_data["setup"]["match_name"] = new_name
                         match_data["setup"]["course"] = new_course
                         match_data["setup"]["tee"] = new_tee
@@ -571,8 +558,8 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                         
                     if st.form_submit_button("💾 Save Changes", type="primary", use_container_width=True):
                         new_players = {
-                            e_a1: {"hi": e_hi_a1}, e_a2: {"hi": e_hi_a2},
-                            e_b1: {"hi": e_hi_b1}, e_b2: {"hi": e_hi_b2}
+                            e_a1: {"hi": round(e_hi_a1, 1)}, e_a2: {"hi": round(e_hi_a2, 1)},
+                            e_b1: {"hi": round(e_hi_b1, 1)}, e_b2: {"hi": round(e_hi_b2, 1)}
                         }
                         match_data["setup"]["match_name"] = new_name
                         match_data["setup"]["course"] = new_course
@@ -586,7 +573,6 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                         st.success("Match updated successfully!")
                         st.rerun()
 
-            # DANGER ZONE (Match Deletion)
             st.write("<br><br>", unsafe_allow_html=True)
             st.divider()
             st.subheader("Danger Zone")
@@ -649,11 +635,11 @@ else:
             col1, col2 = st.columns(2)
             with col1: 
                 p1 = st.text_input("Player 1 Name", key="s_p1_n")
-                if use_handicaps: players[p1] = {"hi": st.number_input("Player 1 HI", value=10.0, format="%.1f", step=0.1, key="s_p1_h")}
+                if use_handicaps: players[p1] = {"hi": round(st.number_input("Player 1 HI", value=10.0, format="%.1f", step=0.1, key="s_p1_h"), 1)}
                 else: players[p1] = {"hi": 0.0}
             with col2: 
                 p2 = st.text_input("Player 2 Name", key="s_p2_n")
-                if use_handicaps: players[p2] = {"hi": st.number_input("Player 2 HI", value=10.0, format="%.1f", step=0.1, key="s_p2_h")}
+                if use_handicaps: players[p2] = {"hi": round(st.number_input("Player 2 HI", value=10.0, format="%.1f", step=0.1, key="s_p2_h"), 1)}
                 else: players[p2] = {"hi": 0.0}
                 
             if st.button("Generate Match & Link", type="primary", use_container_width=True):
@@ -687,22 +673,22 @@ else:
             colA1, colA2 = st.columns(2)
             with colA1:
                 a1 = st.text_input("P1 Name", key="t_a1_n")
-                if use_handicaps: players[a1] = {"hi": st.number_input("P1 HI", value=10.0, format="%.1f", step=0.1, key="t_a1_h")}
+                if use_handicaps: players[a1] = {"hi": round(st.number_input("P1 HI", value=10.0, format="%.1f", step=0.1, key="t_a1_h"), 1)}
                 else: players[a1] = {"hi": 0.0}
             with colA2:
                 a2 = st.text_input("P2 Name", key="t_a2_n")
-                if use_handicaps: players[a2] = {"hi": st.number_input("P2 HI", value=10.0, format="%.1f", step=0.1, key="t_a2_h")}
+                if use_handicaps: players[a2] = {"hi": round(st.number_input("P2 HI", value=10.0, format="%.1f", step=0.1, key="t_a2_h"), 1)}
                 else: players[a2] = {"hi": 0.0}
                 
             st.write("**Team B**")
             colB1, colB2 = st.columns(2)
             with colB1:
                 b1 = st.text_input("P3 Name", key="t_b1_n")
-                if use_handicaps: players[b1] = {"hi": st.number_input("P3 HI", value=10.0, format="%.1f", step=0.1, key="t_b1_h")}
+                if use_handicaps: players[b1] = {"hi": round(st.number_input("P3 HI", value=10.0, format="%.1f", step=0.1, key="t_b1_h"), 1)}
                 else: players[b1] = {"hi": 0.0}
             with colB2:
                 b2 = st.text_input("P4 Name", key="t_b2_n")
-                if use_handicaps: players[b2] = {"hi": st.number_input("P4 HI", value=10.0, format="%.1f", step=0.1, key="t_b2_h")}
+                if use_handicaps: players[b2] = {"hi": round(st.number_input("P4 HI", value=10.0, format="%.1f", step=0.1, key="t_b2_h"), 1)}
                 else: players[b2] = {"hi": 0.0}
 
             if st.button("Generate Match & Link", type="primary", use_container_width=True):
