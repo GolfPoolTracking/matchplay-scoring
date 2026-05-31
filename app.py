@@ -61,6 +61,7 @@ try:
     st.session_state["db_matches"] = {}
     for row in db_res.data:
         data = row.get("match_data", {})
+        # Ensure we are loading records built for this outcome-based format
         if "setup" in data and "outcomes" in data:
             st.session_state["db_matches"][row["id"]] = data
 except Exception as e:
@@ -187,24 +188,26 @@ def render_live_card(match_data, team_names, shots_received, total_holes):
     shots_a = shots_received.get(team_names['A'], 0)
     shots_b = shots_received.get(team_names['B'], 0)
     
-    disp_a = f"{team_names['A']} ({shots_a})" if shots_a > 0 else team_names['A']
-    disp_b = f"{team_names['B']} ({shots_b})" if shots_b > 0 else team_names['B']
+    # 2-line layout components for Team A
+    name_a_html = f"<span style='display:inline-block; width:10px; height:10px; border-radius:50%; background-color:{COLOR_A}; margin-right:8px;'></span>{team_names['A']}"
+    shots_a_html = f"<div style='font-size: 10px; font-weight: normal; margin-top: 2px; opacity: 0.8;'>{shots_a} Shots</div>" if shots_a > 0 else ""
     
-    name_a_display = f"<span style='display:inline-block; width:10px; height:10px; border-radius:50%; background-color:{COLOR_A}; margin-right:8px;'></span>{disp_a}"
-    name_b_display = f"{disp_b}<span style='display:inline-block; width:10px; height:10px; border-radius:50%; background-color:{COLOR_B}; margin-left:8px;'></span>"
+    # 2-line layout components for Team B
+    name_b_html = f"{team_names['B']}<span style='display:inline-block; width:10px; height:10px; border-radius:50%; background-color:{COLOR_B}; margin-left:8px;'></span>"
+    shots_b_html = f"<div style='font-size: 10px; font-weight: normal; margin-top: 2px; opacity: 0.8;'>{shots_b} Shots</div>" if shots_b > 0 else ""
     
     if leader == "A":
         bg_a, text_a = COLOR_A, "white"
         shape_a = "polygon(0% 0%, 92% 0%, 100% 50%, 92% 100%, 0% 100%)"
         border_a = f"1px solid {COLOR_A}"
         status_text = f"<span style='color: {COLOR_A};'>{final_str}</span>"
-        name_a_display = disp_a 
+        name_a_html = team_names['A'] 
     elif leader == "B":
         bg_b, text_b = COLOR_B, "white"
         shape_b = "polygon(8% 0%, 100% 0%, 100% 100%, 8% 100%, 0% 50%)"
         border_b = f"1px solid {COLOR_B}"
         status_text = f"<span style='color: {COLOR_B};'>{final_str}</span>"
-        name_b_display = disp_b 
+        name_b_html = team_names['B'] 
     else:
         status_text = "<span style='color: #555;'>ALL SQ</span>"
 
@@ -220,8 +223,43 @@ def render_live_card(match_data, team_names, shots_received, total_holes):
 
     subtext = "FINAL" if match_over else f"Thru {holes_played}"
 
-    html_string = f"""<div style="background: white; border: 1px solid #eaeaea; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 20px; margin-top: 10px; font-family: sans-serif;"><div style="text-align: center; color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 1px;">{setup['match_name']} - {setup['match_type']}</div><div style="display: flex; align-items: center; justify-content: space-between; height: 65px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px;"><div style="flex: 1; height: 100%; background: {bg_a}; color: {text_a}; display: flex; align-items: center; padding-left: 15px; font-weight: bold; font-size: 15px; border-radius: 6px 0 0 6px; clip-path: {shape_a}; border: {border_a}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{name_a_display}</div><div style="width: 100px; text-align: center; display: flex; flex-direction: column; justify-content: center; flex-shrink: 0;"><span style="font-size: 11px; color: #999; text-transform: uppercase; margin-bottom: 2px; font-weight: bold;">{subtext}</span><span style="font-size: 18px; font-weight: 800;">{status_text}</span></div><div style="flex: 1; height: 100%; background: {bg_b}; color: {text_b}; display: flex; align-items: center; justify-content: flex-end; padding-right: 15px; font-weight: bold; font-size: 15px; border-radius: 0 6px 6px 0; clip-path: {shape_b}; border: {border_b}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{name_b_display}</div></div><div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">{circles_html}</div></div>"""
-    st.html(html_string)
+    html_string = f"""
+    <div style="background: white; border: 1px solid #eaeaea; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 20px; margin-top: 10px; font-family: sans-serif;">
+        <div style="text-align: center; color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 1px;">
+            {setup['match_name']} - {setup['match_type']}
+        </div>
+        
+        <div style="display: flex; align-items: center; justify-content: space-between; height: 75px; border-bottom: 1px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px;">
+            
+            <div style="flex: 1; height: 100%; background: {bg_a}; color: {text_a}; display: flex; flex-direction: column; justify-content: center; padding-left: 15px; border-radius: 6px 0 0 6px; clip-path: {shape_a}; border: {border_a}; overflow: hidden;">
+                <div style="font-weight: bold; font-size: 15px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">
+                    {name_a_html}
+                </div>
+                {shots_a_html}
+            </div>
+            
+            <div style="width: 100px; text-align: center; display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; padding: 0 5px;">
+                <span style="font-size: 11px; color: #999; text-transform: uppercase; margin-bottom: 2px; font-weight: bold;">{subtext}</span>
+                <span style="font-size: 18px; font-weight: 800;">{status_text}</span>
+            </div>
+            
+            <div style="flex: 1; height: 100%; background: {bg_b}; color: {text_b}; display: flex; flex-direction: column; justify-content: center; align-items: flex-end; padding-right: 15px; border-radius: 0 6px 6px 0; clip-path: {shape_b}; border: {border_b}; overflow: hidden;">
+                <div style="font-weight: bold; font-size: 15px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">
+                    {name_b_html}
+                </div>
+                {shots_b_html}
+            </div>
+            
+        </div>
+        
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
+            {circles_html}
+        </div>
+    </div>
+    """
+    
+    # Compress string to avoid markdown bugs
+    st.html(html_string.replace('\n', ''))
 
 def render_compact_grid(outcomes, total_holes, active_match_id, current_hole):
     def get_color(hole_val):
@@ -293,7 +331,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
         # ==========================================
         st.button("⬅ Back to Menu", on_click=lambda: st.query_params.clear())
         
-        tab_options = ["Scoreboard", "Score Entry", "Shots Allocation", "Share Links"]
+        tab_options = ["Scoreboard", "Score Entry", "Shots Allocation", "Edit Match", "Share Links"]
         
         if "manager_active_tab" not in st.session_state:
             st.session_state.manager_active_tab = "Score Entry"
@@ -369,8 +407,8 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             
             shots_a = shots_received.get(team_names['A'], 0)
             shots_b = shots_received.get(team_names['B'], 0)
-            disp_a = f"{team_names['A']} ({shots_a})" if shots_a > 0 else team_names['A']
-            disp_b = f"{team_names['B']} ({shots_b})" if shots_b > 0 else team_names['B']
+            disp_a = f"{team_names['A']} ({shots_a} Shots)" if shots_a > 0 else team_names['A']
+            disp_b = f"{team_names['B']} ({shots_b} Shots)" if shots_b > 0 else team_names['B']
 
             with st.container(border=True):
                 st.markdown(f"<div style='text-align:center; color:gray; font-size:14px; margin-bottom:15px;'>Par {h_data['par']} &nbsp;|&nbsp; Index {h_data['index']}</div>", unsafe_allow_html=True)
@@ -434,6 +472,54 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             for p, data in setup["players"].items():
                 raw_data.append({"Player": p, "HI": data["hi"]})
             st.dataframe(pd.DataFrame(raw_data), hide_index=True)
+
+        elif active_tab == "Edit Match":
+            st.header("Edit Match Parameters")
+            st.warning("Note: Changing the course or handicap details will automatically recalculate shots for all holes.")
+            
+            with st.form("edit_match_form"):
+                new_name = st.text_input("Match Name", value=setup["match_name"])
+                
+                c1, c2 = st.columns(2)
+                # Safely find indices in the lists, default to 0 if the course was deleted
+                c_list = list(st.session_state["courses"].keys())
+                c_idx = c_list.index(setup["course"]) if setup["course"] in c_list else 0
+                with c1: 
+                    new_course = st.selectbox("Course", c_list, index=c_idx)
+                
+                t_list = list(st.session_state["courses"][new_course]["tees"].keys())
+                t_idx = t_list.index(setup["tee"]) if setup["tee"] in t_list else 0
+                with c2: 
+                    new_tee = st.selectbox("Tees", t_list, index=t_idx)
+                    
+                new_uh = st.checkbox("Use Handicaps", value=setup.get("use_handicaps", True))
+                
+                st.divider()
+                st.write("**Player Details**")
+                
+                new_players = {}
+                for idx, (p_name, p_data) in enumerate(setup["players"].items()):
+                    pcol1, pcol2 = st.columns([2, 1])
+                    with pcol1:
+                        edited_name = st.text_input(f"Player {idx+1} Name", value=p_name, key=f"edit_name_{idx}")
+                    with pcol2:
+                        edited_hi = st.number_input("HI", value=float(p_data["hi"]), format="%.1f", step=0.1, key=f"edit_hi_{idx}")
+                    
+                    # Prevent duplicate names overriding each other by appending a space if needed
+                    while edited_name in new_players:
+                        edited_name += " "
+                    new_players[edited_name] = {"hi": edited_hi}
+
+                if st.form_submit_button("💾 Save Changes", type="primary", use_container_width=True):
+                    match_data["setup"]["match_name"] = new_name
+                    match_data["setup"]["course"] = new_course
+                    match_data["setup"]["tee"] = new_tee
+                    match_data["setup"]["use_handicaps"] = new_uh
+                    match_data["setup"]["players"] = new_players
+                    
+                    save_match_to_db(active_match_id, match_data)
+                    st.success("Match details updated successfully!")
+                    st.rerun()
 
         elif active_tab == "Share Links":
             st.write("**Public Leaderboard Link (Send to players):**")
