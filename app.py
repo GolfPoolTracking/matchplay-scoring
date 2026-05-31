@@ -61,6 +61,7 @@ try:
     st.session_state["db_matches"] = {}
     for row in db_res.data:
         data = row.get("match_data", {})
+        # Ensure we are loading records built for this outcome-based format
         if "setup" in data and "outcomes" in data:
             st.session_state["db_matches"][row["id"]] = data
 except Exception as e:
@@ -174,6 +175,10 @@ def render_live_card(match_data, team_names, total_holes):
     
     leader, amount, holes_played, match_over, final_str = get_match_status(outcomes, total_holes)
     
+    # Modern Golf Palette: Emerald Green & Indigo
+    COLOR_A = "#10b981" # Emerald Green
+    COLOR_B = "#6366f1" # Indigo
+    
     # Clean transparent defaults for ALL SQ state
     bg_a, text_a = "transparent", "#333"
     bg_b, text_b = "transparent", "#333"
@@ -183,15 +188,15 @@ def render_live_card(match_data, team_names, total_holes):
     border_b = "none"
     
     if leader == "A":
-        bg_a, text_a = "#2563eb", "white"
+        bg_a, text_a = COLOR_A, "white"
         shape_a = "polygon(0% 0%, 92% 0%, 100% 50%, 92% 100%, 0% 100%)"
-        border_a = "1px solid #2563eb"
-        status_text = f"<span style='color: #2563eb;'>{final_str}</span>"
+        border_a = f"1px solid {COLOR_A}"
+        status_text = f"<span style='color: {COLOR_A};'>{final_str}</span>"
     elif leader == "B":
-        bg_b, text_b = "#dc2626", "white"
+        bg_b, text_b = COLOR_B, "white"
         shape_b = "polygon(8% 0%, 100% 0%, 100% 100%, 8% 100%, 0% 50%)"
-        border_b = "1px solid #dc2626"
-        status_text = f"<span style='color: #dc2626;'>{final_str}</span>"
+        border_b = f"1px solid {COLOR_B}"
+        status_text = f"<span style='color: {COLOR_B};'>{final_str}</span>"
     else:
         status_text = "<span style='color: #555;'>ALL SQ</span>"
 
@@ -200,9 +205,9 @@ def render_live_card(match_data, team_names, total_holes):
     for i in range(1, holes_played + 1):
         res = outcomes.get(str(i))
         if res == "A":
-            circles_html += f"<div style='width: 24px; height: 24px; border-radius: 50%; background: #2563eb; color: white; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold;'>{i}</div>"
+            circles_html += f"<div style='width: 24px; height: 24px; border-radius: 50%; background: {COLOR_A}; color: white; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold;'>{i}</div>"
         elif res == "B":
-            circles_html += f"<div style='width: 24px; height: 24px; border-radius: 50%; background: #dc2626; color: white; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold;'>{i}</div>"
+            circles_html += f"<div style='width: 24px; height: 24px; border-radius: 50%; background: {COLOR_B}; color: white; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold;'>{i}</div>"
         elif res == "H":
             circles_html += f"<div style='width: 24px; height: 24px; border-radius: 50%; border: 1px solid #ccc; color: #888; background: #f9f9f9; display: flex; align-items: center; justify-content: center; font-size: 11px;'>{i}</div>"
 
@@ -231,7 +236,12 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
         # ==========================================
         # PUBLIC READ-ONLY DASHBOARD
         # ==========================================
-        st.html("<h4 style='text-align: center; color: #666; margin-top: 20px; font-family: sans-serif;'>Live Matchplay Scoreboard</h4>")
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("🔄 Refresh Scoreboard", use_container_width=True):
+                st.rerun()
+                
+        st.html("<h4 style='text-align: center; color: #666; margin-top: 10px; font-family: sans-serif;'>Live Matchplay Scoreboard</h4>")
         render_live_card(match_data, team_names, total_holes)
 
     else:
@@ -296,9 +306,9 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                     options=["Not Played", "A", "H", "B"],
                     format_func=lambda x: {
                         "Not Played": "⚪ Not Played",
-                        "A": f"🔵 {team_names['A']} Won",
+                        "A": f"🟢 {team_names['A']} Won",
                         "H": "🔘 Halved",
-                        "B": f"🔴 {team_names['B']} Won"
+                        "B": f"🟣 {team_names['B']} Won"
                     }[x],
                     index=["Not Played", "A", "H", "B"].index(current_val),
                     horizontal=False,
