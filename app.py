@@ -3,6 +3,7 @@ import pandas as pd
 import math
 import uuid
 import datetime
+import streamlit.components.v1 as components
 from supabase import create_client, Client
 
 # --- App Configuration ---
@@ -206,6 +207,39 @@ COLOR_A = "#10b981"
 COLOR_B = "#6366f1" 
 COLOR_H = "#9ca3af"
 
+def render_auto_refresh():
+    st.markdown(f"""
+    <div style="text-align: center; color: {COLOR_A}; font-size: 14px; font-weight: bold; margin-bottom: 25px; margin-top: 10px; background-color: {COLOR_A}22; padding: 8px; border-radius: 8px;">
+        🔴 LIVE: Auto-refreshing in <span id="timer-span">120</span>s
+    </div>
+    """, unsafe_allow_html=True)
+
+    components.html(
+        """
+        <script>
+        if (window.parent && window.parent.document) {
+            if (window.parent.liveRefreshInterval) {
+                clearInterval(window.parent.liveRefreshInterval);
+            }
+            let time = 120;
+            window.parent.liveRefreshInterval = setInterval(function() {
+                time--;
+                let span = window.parent.document.getElementById('timer-span');
+                if (span) {
+                    span.innerText = time;
+                }
+                if (time <= 0) {
+                    clearInterval(window.parent.liveRefreshInterval);
+                    window.parent.location.reload();
+                }
+            }, 1000);
+        }
+        </script>
+        """,
+        height=0,
+        width=0
+    )
+
 def render_live_card(match_data, team_display, total_holes):
     setup = match_data["setup"]
     outcomes = match_data.get("outcomes", {})
@@ -347,6 +381,8 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                 
         st.markdown(f"<h3 style='text-align: center; margin-top: 10px; margin-bottom: 0;'>{setup['match_name']}</h3>", unsafe_allow_html=True)
         st.markdown(f"<p style='text-align: center; opacity: 0.7; margin-bottom: 20px;'>{setup['course']} • {setup['match_type']}</p>", unsafe_allow_html=True)
+        
+        render_auto_refresh()
         render_live_card(match_data, team_display, total_holes)
 
     else:
@@ -376,6 +412,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
         st.divider()
 
         if active_tab == "Scoreboard":
+            render_auto_refresh()
             render_live_card(match_data, team_display, total_holes)
             
         elif active_tab == "Score Entry":
