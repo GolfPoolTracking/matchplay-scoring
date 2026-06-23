@@ -6,6 +6,11 @@ import datetime
 import streamlit.components.v1 as components
 from supabase import create_client, Client
 
+#Ping to keep app and DB alive
+if st.query_params.get("view") == "ping":
+    st.write("Server is awake and ready! 🟢")
+    st.stop()
+
 # --- App Configuration ---
 st.set_page_config(page_title="Matchplay Centre", layout="centered")
 
