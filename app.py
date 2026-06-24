@@ -552,6 +552,12 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
             with st.form("edit_match_form"):
                 new_name = st.text_input("Match Name", value=setup["match_name"])
                 
+                try:
+                    current_date = datetime.datetime.strptime(setup.get("date", ""), '%d %b %Y').date()
+                except ValueError:
+                    current_date = datetime.date.today()
+                new_date = st.date_input("Match Date", value=current_date)
+                
                 c1, c2, c3 = st.columns([2, 1, 1])
                 c_list = list(st.session_state["courses"].keys())
                 c_idx = c_list.index(setup["course"]) if setup["course"] in c_list else 0
@@ -586,6 +592,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                     if st.form_submit_button("💾 Save Changes", type="primary", use_container_width=True):
                         new_players = {e_a1: {"hi": round(e_hi_a1, 1)}, e_b1: {"hi": round(e_hi_b1, 1)}}
                         match_data["setup"]["match_name"] = new_name
+                        match_data["setup"]["date"] = new_date.strftime('%d %b %Y')
                         match_data["setup"]["course"] = new_course
                         match_data["setup"]["tee"] = new_tee
                         match_data["setup"]["holes_format"] = new_format
@@ -625,6 +632,7 @@ if active_match_id and active_match_id in st.session_state["db_matches"]:
                             e_b1: {"hi": round(e_hi_b1, 1)}, e_b2: {"hi": round(e_hi_b2, 1)}
                         }
                         match_data["setup"]["match_name"] = new_name
+                        match_data["setup"]["date"] = new_date.strftime('%d %b %Y')
                         match_data["setup"]["course"] = new_course
                         match_data["setup"]["tee"] = new_tee
                         match_data["setup"]["holes_format"] = new_format
