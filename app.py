@@ -669,15 +669,32 @@ else:
         if not st.session_state["db_matches"]:
             st.info("No matches found. Create one in the next tab!")
         else:
+            show_archived = st.toggle("📂 Show Archived (Completed) Matches", value=False)
+            st.divider()
+            
+            displayed_count = 0
             for m_id, m_data in st.session_state["db_matches"].items():
-                with st.container(border=True):
-                    st.subheader(m_data["setup"]["match_name"])
-                    fmt_holes = m_data["setup"].get("holes_format", 18)
-                    st.write(f"{m_data['setup']['date']} | {m_data['setup']['course']} ({fmt_holes} Holes) | {m_data['setup']['match_type']}")
-                    if st.button("Manage Match", key=f"open_{m_id}"):
-                        st.query_params["match_id"] = m_id
-                        st.query_params["manage"] = "true"
-                        st.rerun()
+                # Dynamically calculate if match is over
+                fmt_holes = m_data["setup"].get("holes_format", 18)
+                tot_holes = fmt_holes + m_data.get("extra_holes", 0)
+                _, _, _, match_over, _ = get_match_status(m_data.get("outcomes", {}), tot_holes)
+                
+                # Check filter condition
+                if (show_archived and match_over) or (not show_archived and not match_over):
+                    displayed_count += 1
+                    with st.container(border=True):
+                        st.subheader(m_data["setup"]["match_name"])
+                        st.write(f"{m_data['setup']['date']} | {m_data['setup']['course']} ({fmt_holes} Holes) | {m_data['setup']['match_type']}")
+                        if st.button("Manage Match", key=f"open_{m_id}"):
+                            st.query_params["match_id"] = m_id
+                            st.query_params["manage"] = "true"
+                            st.rerun()
+            
+            if displayed_count == 0:
+                if show_archived:
+                    st.info("No archived matches found.")
+                else:
+                    st.info("No active matches found. Enjoy your round or create a new one in the next tab!")
 
     with tab_create:
         st.header("New Match Setup")
