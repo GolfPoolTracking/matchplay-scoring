@@ -14,6 +14,10 @@ if st.query_params.get("view") == "ping":
 # --- App Configuration ---
 st.set_page_config(page_title="Matchplay Centre", layout="centered")
 
+# --- Error reporting (Sentry) ---
+from sentry_setup import init_sentry  # noqa: E402
+init_sentry()
+
 BASE_URL = "https://matchplay-scoring.streamlit.app"
 
 # --- Supabase Initialization ---
